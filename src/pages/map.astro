@@ -38,43 +38,152 @@ export const prerender = false;
    crossorigin=""></script>
 
   <style>
-    /* Keep the fade-in animation specific to this page if needed,
-       or rely on the global one if you prefer */
+    /* Enhanced Rainbow Gradient Variables from show-forecast.astro */
+    :root {
+      --gradient-start: #ff6b6b;
+      --gradient-middle: #4ecdc4;
+      --gradient-end: #a29bfe;
+      --gradient-full: linear-gradient(
+        135deg,
+        var(--gradient-start) 0%,
+        var(--gradient-middle) 50%,
+        var(--gradient-end) 100%
+      );
+    }
+
+    /* Rainbow Animation from show-forecast.astro */
+    @keyframes rainbow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* General body/layout styling (ensure consistency with BaseLayout if needed) */
+    body {
+      background-color: var(--color-bg, #0a0a0a); /* Match forecast background */
+      color: var(--color-text, #e0e0e0); /* Match forecast text color */
+    }
+
+    /* Apply forecast-content styling to the main container */
+    #map-page-content {
+      background-color: rgba(20, 20, 30, 0.7);
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+      padding: 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      margin: 2rem auto; /* Center the content */
+      max-width: 900px; /* Adjust max-width as needed */
+      width: 90%;
+    }
+
+    /* Apply rainbow gradient to the location display */
+    #location-display {
+      font-size: 2rem; /* Adjust size as needed */
+      margin: 0.5rem 0 1.5rem 0;
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: rainbow 15s ease infinite;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: center;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Keep map specific styles */
+    #map {
+      height: 400px;
+      width: 90%; /* Adjust width */
+      max-width: 700px; /* Adjust max-width */
+      margin: 1.5rem auto; /* Center map */
+      border-radius: 12px; /* Slightly rounded corners */
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+      z-index: 5; /* Ensure map is above background but below potential overlays */
+    }
+
+    /* Style the questionnaire section */
+    #questionnaire {
+      margin-top: 2rem;
+      text-align: center;
+      padding: 1.5rem;
+      background-color: rgba(15, 15, 25, 0.8); /* Similar to recommendation panel */
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    #questionnaire h3 {
+      color: #e0e0e0; /* Match text color */
+      margin-bottom: 1.5rem;
+      font-size: 1.3rem;
+    }
+
+    #questionnaire .options {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* Style preference buttons like the back-button */
+    #questionnaire .options button {
+      display: inline-flex; /* Use inline-flex for alignment */
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.8rem 1.5rem;
+      border-radius: 30px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: rainbow 15s ease infinite;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Adjusted shadow */
+      opacity: 0.7; /* Keep initial disabled look */
+    }
+
+    #questionnaire .options button:not(:disabled) {
+       opacity: 1; /* Full opacity when enabled */
+    }
+
+    #questionnaire .options button:hover:not(:disabled) {
+      transform: translateY(-3px);
+      box-shadow: 0 7px 20px rgba(0, 0, 0, 0.3); /* Enhanced hover shadow */
+    }
+
+    #questionnaire .options button:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    /* Remove old results styling, as results are handled by show-forecast */
+    /* #results styling removed */
+
+    /* Keep fade-in/out transitions */
     .fade-in {
       animation: fadeIn 0.5s ease-in-out forwards;
     }
 
-    /* Add specific styles for the map page if necessary */
     #map, #questionnaire {
       transition: opacity 0.5s ease-in-out;
     }
+
     .fade-out {
-      opacity: 0;
+      opacity: 0.3; /* Keep slight visibility */
       pointer-events: none;
     }
-    #results {
-        transition: opacity 0.5s ease-in-out;
-        /* Ensure results container allows centering */
-        display: flex; 
-        justify-content: center;
-        align-items: center;
-        min-height: 150px; /* Give it some height */
-    }
-    #results button {
-        /* Basic button styling */
-        padding: 0.6rem 1.2rem;
-        margin-top: 1rem;
-        border: 1px solid var(--gradient-start, #a29bfe);
-        background-color: rgba(255, 255, 255, 0.1);
-        color: var(--color-text, #e0e0e0);
-        border-radius: 20px;
-        cursor: pointer;
-        transition: background-color 0.3s, transform 0.2s;
-    }
-    #results button:hover {
-        background-color: rgba(162, 155, 254, 0.2);
-        transform: translateY(-2px);
-    }
+
+    /* Remove redundant styles handled by new rules */
+    /* .fade-in animation rule might be redundant if global */
+    /* #results specific styles removed */
+    /* Some #map, #questionnaire transitions might be redundant */
   </style>
 
   <script is:inline>
@@ -82,6 +191,29 @@ export const prerender = false;
     let map = null;
     let currentLocation = null;
     let locationTimeout = null;
+
+    // Define updateLocationName in the global scope
+    async function updateLocationName(lat, lon) {
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+        const data = await response.json();
+        const city = data.address.city || data.address.town || data.address.village || 'Unknown City';
+        const province = data.address.state || data.address.county || 'Unknown Province';
+        const locationDisplay = document.getElementById('location-display');
+        if (locationDisplay) {
+          locationDisplay.textContent = `${city}, ${province}`;
+        }
+        return `${city}, ${province}`;
+      } catch (error) {
+        console.error('Error fetching location name:', error);
+        const locationText = `Your Location (Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)})`;
+        const locationDisplay = document.getElementById('location-display');
+        if (locationDisplay) {
+          locationDisplay.textContent = locationText;
+        }
+        return locationText;
+      }
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
       console.log('DOM fully loaded and parsed');
@@ -144,8 +276,8 @@ export const prerender = false;
             .bindPopup('Your location')
             .openPopup();
 
-          locationDisplay.textContent = `Your Location (Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)})`;
-          console.log('Map initialized successfully at:', currentLocation);
+          // Update location name
+          updateLocationName(lat, lon);
           
           // Enable questionnaire buttons once location is set
           questionnaireOptions.forEach(button => {
@@ -188,10 +320,19 @@ export const prerender = false;
       function resetView() {
         if (resultsDisplay) {
           resultsDisplay.style.opacity = '0';
+          resultsDisplay.classList.remove('visible');
           setTimeout(() => { resultsDisplay.innerHTML = ''; }, 500);
         }
-        if (mapElement) mapElement.classList.remove('fade-out');
-        if (questionnaireElement) questionnaireElement.classList.remove('fade-out');
+        if (mapElement) {
+          mapElement.classList.remove('fade-out');
+          mapElement.style.opacity = '1';
+          mapElement.style.pointerEvents = 'auto';
+        }
+        if (questionnaireElement) {
+          questionnaireElement.classList.remove('fade-out');
+          questionnaireElement.style.opacity = '1';
+          questionnaireElement.style.pointerEvents = 'auto';
+        }
         
         questionnaireOptions.forEach(button => {
           button.disabled = false;
@@ -322,8 +463,8 @@ export const prerender = false;
         throw lastError || new Error('Failed to fetch weather data after multiple attempts');
       }
 
+      // Update handlePreferenceSelection to use the global updateLocationName
       async function handlePreferenceSelection(preference) {
-        // Location validation
         if (!currentLocation) {
           console.warn('Location not available');
           resultsDisplay.style.opacity = '1';
@@ -331,7 +472,6 @@ export const prerender = false;
           return;
         }
         
-        // Double-check that coordinates are valid
         if (isNaN(currentLocation.lat) || isNaN(currentLocation.lon)) {
           console.error('Invalid location coordinates:', currentLocation);
           resultsDisplay.style.opacity = '1';
@@ -339,65 +479,17 @@ export const prerender = false;
           return;
         }
 
-        // Disable buttons
-        questionnaireOptions.forEach(button => {
-          button.disabled = true;
-          button.style.opacity = '0.5';
-          button.style.pointerEvents = 'none';
-        });
+        // Get city name for the forecast page
+        const cityName = await updateLocationName(currentLocation.lat, currentLocation.lon);
 
-        mapElement.classList.add('fade-out');
-        questionnaireElement.classList.add('fade-out');
-
-        resultsDisplay.innerHTML = `
-          <div style="text-align: center;">
-            <p>Finding the best day for <strong>${preference}</strong> weather...</p>
-            <div class="loading-spinner" style="margin: 1rem auto;"></div>
-          </div>
-        `;
-        resultsDisplay.style.opacity = '1';
-
-        try {
-          console.log(`Initiating weather data request for preference: ${preference}`);
-          console.log('Using coordinates:', currentLocation);
-          
-          const weatherData = await callWeatherAPI(currentLocation, preference);
-          
-          let resultHTML = '';
-          if (weatherData.recommendation?.bestDay) {
-            const { date, avgTemp, condition } = weatherData.recommendation.bestDay;
-            const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
-            const dateString = new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
-            const locationName = weatherData.location?.name ? ` in ${weatherData.location.name}` : '';
-
-            resultHTML = `
-              <div style="text-align: center;">
-                <p>The best day for <strong>${preference}</strong> weather${locationName} is <strong>${dayName}, ${dateString}</strong>.</p>
-                <p>Expect ${condition?.toLowerCase() || 'pleasant'} conditions with temperatures around ${avgTemp?.toFixed(0)}°C.</p>
-                <button onclick="window.location.reload()">Check Another Day</button>
-              </div>
-            `;
-          } else {
-            resultHTML = `
-              <div style="text-align: center;">
-                <p>Sorry, couldn't find ideal ${preference} weather in the forecast.</p>
-                <button onclick="window.location.reload()">Try Again</button>
-              </div>
-            `;
-          }
-
-          resultsDisplay.innerHTML = resultHTML;
-
-        } catch (error) {
-          console.error('Weather data request failed:', error);
-          resultsDisplay.innerHTML = `
-            <div style="text-align: center; color: red;">
-              <p>Error: ${error.message}</p>
-              <p>Please check the console for details.</p>
-              <button onclick="window.location.reload()">Try Again</button>
-            </div>
-          `;
-        }
+        // Redirect to show-forecast page with all necessary parameters
+        const forecastUrl = new URL('/show-forecast', window.location.origin);
+        forecastUrl.searchParams.set('lat', currentLocation.lat.toString());
+        forecastUrl.searchParams.set('lon', currentLocation.lon.toString());
+        forecastUrl.searchParams.set('pref', preference);
+        forecastUrl.searchParams.set('city', encodeURIComponent(cityName));
+        
+        window.location.href = forecastUrl.toString();
       }
 
       // Set up location timeout
@@ -416,7 +508,6 @@ export const prerender = false;
             clearTimeout(locationTimeout);
             console.log('Location received:', position.coords);
             
-            // Ensure coordinates are proper numbers
             const lat = parseFloat(position.coords.latitude.toFixed(6));
             const lon = parseFloat(position.coords.longitude.toFixed(6));
             
@@ -440,7 +531,6 @@ export const prerender = false;
 
       // Set up preference button listeners
       questionnaireOptions.forEach(button => {
-        // Initially disable buttons until location is set
         button.disabled = true;
         button.style.opacity = '0.7';
         
@@ -454,4 +544,4 @@ export const prerender = false;
 
     }); // End of DOMContentLoaded
   </script>
-</BaseLayout> 
+</BaseLayout>

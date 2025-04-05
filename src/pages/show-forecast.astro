@@ -1,7 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 
-// Get query parameters
 const { searchParams } = Astro.url;
 const lat = searchParams.get('lat');
 const lon = searchParams.get('lon');
@@ -9,15 +8,17 @@ const pref = searchParams.get('pref') || 'preferred';
 const city = searchParams.get('city') || 'Your Location';
 
 let forecastData = null;
+let trailsData = null;
 let error = null;
 let recommendationText = '';
 let seasonalAverageText = '';
-let locationName = decodeURIComponent(city); // Use the provided city name
+let aiNarrativeText: string | null = null;
+let locationName = decodeURIComponent(city);
 let isLoading = true;
+let filteredForecast = [];
 
 if (lat && lon) {
   try {
-    // Parse coordinates to ensure they're valid numbers
     const latNum = parseFloat(lat);
     const lonNum = parseFloat(lon);
     
@@ -25,72 +26,86 @@ if (lat && lon) {
       throw new Error("Invalid coordinates format");
     }
     
-    // Construct the API URL correctly
-    const apiUrl = new URL('/api/weather', Astro.url.origin);
-    apiUrl.search = new URLSearchParams({
+    const weatherUrl = new URL('/api/weather', Astro.url.origin);
+    weatherUrl.search = new URLSearchParams({
       lat: latNum.toString(),
       lon: lonNum.toString(),
       pref: encodeURIComponent(pref)
     }).toString();
-    console.log(`Fetching forecast from: ${apiUrl}`);
 
-    // Fetch on the server-side
-    const response = await fetch(apiUrl);
+    const trailsUrl = new URL('/api/trails', Astro.url.origin);
+    trailsUrl.search = new URLSearchParams({
+      lat: latNum.toString(),
+      lon: lonNum.toString()
+    }).toString();
+
+    const [weatherResponse, trailsResponse] = await Promise.all([
+      fetch(weatherUrl),
+      fetch(trailsUrl)
+    ]);
     
-    if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`API Error Body: ${errorBody}`);
-        throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+    if (!weatherResponse.ok) {
+      throw new Error(`Weather API request failed with status ${weatherResponse.status}`);
+    }
+    if (!trailsResponse.ok) {
+      throw new Error(`Trails API request failed with status ${trailsResponse.status}`);
     }
 
-    forecastData = await response.json();
+    forecastData = await weatherResponse.json();
+    trailsData = await trailsResponse.json();
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (forecastData?.forecast) {
+      filteredForecast = forecastData.forecast.filter((day: any) => day.date >= todayStr);
+    }
+
     isLoading = false;
     
-    // Generate recommendation text
     if (forecastData.recommendation && forecastData.recommendation.bestDay) {
-      const { date, avgTemp, condition } = forecastData.recommendation.bestDay;
-      const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
+      const { date, avgTemp, condition, description } = forecastData.recommendation.bestDay;
+      const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
       const dateString = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      recommendationText = `In the next ${forecastData.forecast?.length || 5} days, ${dayName}, ${dateString} looks best for '${pref}' weather. It's expected to be ${condition?.toLowerCase() || 'pleasant'} with an average temperature around ${avgTemp?.toFixed(0)}°C.`;
+      recommendationText = `${dayName}, ${dateString} looks best for '${pref}' weather. Expect ${description || condition.toLowerCase() || 'pleasant conditions'} with an average temperature around ${avgTemp?.toFixed(0)}°C.`;
     } else {
       recommendationText = `Could not determine the best day for '${pref}' weather based on the forecast.`;
     }
 
-    // Get seasonal average text
+    if (forecastData.recommendation && forecastData.recommendation.aiNarrative) {
+      aiNarrativeText = forecastData.recommendation.aiNarrative;
+    } else {
+      aiNarrativeText = null;
+    }
+
     if (forecastData.seasonalAverage) {
-      seasonalAverageText = `Current seasonal average: ${forecastData.seasonalAverage.temp.toFixed(1)}°C (${forecastData.seasonalAverage.season})`;
+      seasonalAverageText = `Typical ${forecastData.seasonalAverage.season} average: ${forecastData.seasonalAverage.temp.toFixed(1)}°C`;
     } else {
       seasonalAverageText = 'Seasonal data not available';
     }
 
   } catch (error: any) {
-    console.error("Error fetching or processing forecast:", error);
-    error = `Failed to load forecast data: ${error.message}`;
+    console.error("Error fetching data:", error);
+    error = `Failed to load data: ${error.message}`;
     isLoading = false;
   }
 } else {
-  error = "Location parameters (latitude and longitude) are missing. Please return to the map and try again.";
+  error = "Location parameters are missing. Please return to the map and try again.";
   isLoading = false;
 }
 
-// Helper function to format date
 function formatDate(dateString: string, format = 'short'): string {
     const date = new Date(dateString);
     if (format === 'short') {
-        return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }); // e.g., Sun, 6
+        return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
     }
-    // Add other formats if needed
     return date.toLocaleDateString();
 }
 
-// Helper function to determine if a day is 'Today'
 function isToday(dateString: string): boolean {
     const today = new Date();
     const date = new Date(dateString);
     return today.toDateString() === date.toDateString();
 }
 
-// Helper to map condition text to icon
 function getWeatherIcon(condition: string): string {
     const lowerCondition = (condition || '').toLowerCase();
     if (lowerCondition.includes('rain') || lowerCondition.includes('drizzle')) return '🌧️';
@@ -98,16 +113,17 @@ function getWeatherIcon(condition: string): string {
     if (lowerCondition.includes('cloud') || lowerCondition.includes('overcast')) return '☁️';
     if (lowerCondition.includes('clear') || lowerCondition.includes('sunny')) return '☀️';
     if (lowerCondition.includes('fog') || lowerCondition.includes('mist')) return '🌫️';
-    return '❓'; // Default unknown icon
+    if (lowerCondition.includes('storm') || lowerCondition.includes('thunder')) return '⛈️';
+    return '❓';
 }
 
-// Helper to determine condition style class
 function getConditionClass(condition: string): string {
     const lowerCondition = (condition || '').toLowerCase();
     if (lowerCondition.includes('rain')) return 'rain';
     if (lowerCondition.includes('snow')) return 'snow';
     if (lowerCondition.includes('clear')) return 'clear';
     if (lowerCondition.includes('cloud')) return 'clouds';
+    if (lowerCondition.includes('storm')) return 'storm';
     return 'default-condition';
 }
 ---
@@ -118,8 +134,8 @@ function getConditionClass(condition: string): string {
   <div class="app-container">
     <header class="app-header">
       <div class="logo">
-        <span class="logo-icon">🌦️</span>
-        <span class="logo-text">WeatherExplorer</span>
+        <span class="logo-icon">🌲</span>
+        <span class="logo-text">TrailForge</span>
       </div>
     </header>
     
@@ -137,27 +153,31 @@ function getConditionClass(condition: string): string {
       {isLoading && (
         <div class="loading-container">
           <div class="loading-spinner"></div>
-          <p>Loading your forecast...</p>
+          <p>Loading your forecast & AI insights...</p>
         </div>
       )}
   
-      {forecastData && forecastData.forecast && (
+      {forecastData && filteredForecast.length > 0 && (
         <div id="forecast-content" class="forecast-content">
           <div class="location-header">
             <div class="location-breadcrumb">
               <a href="/" class="home-link">Home</a> &gt; <a href="/map" class="map-link">Map</a> &gt; <span class="current-page">Forecast</span>
             </div>
             <h1>{locationName}</h1>
-            <div class="preference-tag">{pref}</div>
+            <div class="preference-tag">Preference: {pref}</div>
           </div>
           
           <div class="recommendation-panel">
             <p class="recommendation-text">{recommendationText}</p>
+            <div class="ai-narrative">
+              <span class="ai-icon">✨</span>
+              <p class="placeholder">Loading AI insights...</p>
+            </div>
             <p class="seasonal-context">{seasonalAverageText}</p>
           </div>
   
           <div class="forecast-grid">
-            {forecastData.forecast.map((day: any, index: number) => {
+            {filteredForecast.map((day: any) => {
               const todayClass = isToday(day.date) ? 'today' : '';
               const conditionClass = getConditionClass(day.condition);
               return (
@@ -166,15 +186,40 @@ function getConditionClass(condition: string): string {
                   <div class="weather-icon">{getWeatherIcon(day.condition)}</div>
                   <div class="temp">{day.avgTemp?.toFixed(0)}°C</div>
                   <div class="temp-range">H:{day.maxTemp?.toFixed(0)}° L:{day.minTemp?.toFixed(0)}°</div>
-                  <div class={`condition ${conditionClass}`}>{day.condition}</div>
-                  <div class="description">{day.description || `Cloud cover: ${day.cloudCover?.toFixed(0)}%`}</div>
-                  {day.precipitation > 0 && (
-                    <div class="precipitation">Rain: {day.precipitation?.toFixed(1)}mm</div>
-                  )}
+                  <div class={`condition ${conditionClass}`} title={day.description}>{day.condition}</div>
+                  <div class="weather-details">
+                    <div>💨 {day.windSpeed?.toFixed(1)} km/h</div>
+                    <div>💧 {day.humidity?.toFixed(0)}%</div>
+                    <div>☁️ {day.cloudCover?.toFixed(0)}%</div>
+                    {day.precipitation > 0.1 && (
+                      <div>{getWeatherIcon(day.condition)} {day.precipitation?.toFixed(1)}mm</div>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
+
+          {trailsData && trailsData.trails && (
+            <div class="trails-section">
+              <h2>Nearby Trails</h2>
+              <div class="trails-grid">
+                {trailsData.trails.map((trail: any) => (
+                  <a href={trail.mapLink} target="_blank" rel="noopener noreferrer" class="trail-card-link">
+                    <div class="trail-card">
+                      <h3>{trail.name}</h3>
+                      <p class="trail-location">{trail.location}</p>
+                      <div class="trail-details">
+                        <span class="difficulty">{trail.difficulty}</span>
+                        {trail.length && <span class="length">🏃‍♂️ {trail.length.toFixed(1)} km</span>}
+                      </div>
+                      {trail.description && <p class="trail-description">{trail.description}</p>}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
   
           <div class="action-buttons">
             <button id="back-button" class="back-button">
@@ -189,12 +234,11 @@ function getConditionClass(condition: string): string {
     </main>
     
     <footer class="app-footer">
-      <p>© 2024 WeatherExplorer | Weather data provided for educational purposes</p>
+      <p>© 2024 WeatherExplorer | AI insights by DeepSeek | Weather data for planning purposes</p>
     </footer>
   </div>
 
   <style>
-    /* Page Transition Styles */
     .page-overlay {
       position: fixed;
       top: 0;
@@ -213,7 +257,6 @@ function getConditionClass(condition: string): string {
       pointer-events: all;
     }
 
-    /* App Layout */
     .app-container {
       display: flex;
       flex-direction: column;
@@ -226,30 +269,31 @@ function getConditionClass(condition: string): string {
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       padding: 1rem 2rem;
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
       position: sticky;
       top: 0;
       z-index: 10;
+      text-align: center;
     }
     
     .logo {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.75rem;
     }
     
     .logo-icon {
-      font-size: 1.5rem;
+      font-size: 1.8rem;
     }
     
     .logo-text {
-      font-size: 1.2rem;
+      font-size: 1.5rem;
       font-weight: bold;
       background: linear-gradient(
         to right,
         var(--gradient-start, #a29bfe),
-        var(--gradient-end, #fd79a8)
+        var(--gradient-end, #4ecdc4)
       );
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -266,7 +310,6 @@ function getConditionClass(condition: string): string {
       border-top: 1px solid rgba(255, 255, 255, 0.05);
     }
 
-    /* Loading Styles */
     .loading-container {
       display: flex;
       flex-direction: column;
@@ -333,8 +376,8 @@ function getConditionClass(condition: string): string {
     }
 
     .forecast-content {
-      background-color: rgba(20, 20, 30, 0.6);
-      backdrop-filter: blur(10px);
+      background-color: rgba(20, 20, 30, 0.7);
+      backdrop-filter: blur(12px);
       border-radius: 16px;
       box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
       padding: 2rem;
@@ -348,7 +391,7 @@ function getConditionClass(condition: string): string {
       display: flex;
       gap: 0.5rem;
       font-size: 0.9rem;
-      margin-bottom: 1rem;
+      margin-bottom: 1.5rem;
       color: #aaa;
     }
     
@@ -369,15 +412,15 @@ function getConditionClass(condition: string): string {
 
     .location-header {
       text-align: center;
-      margin-bottom: 2rem;
-      padding-bottom: 1rem;
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       position: relative;
     }
 
     .location-header h1 {
       font-size: 3rem;
-      margin: 0.5rem 0;
+      margin: 0.5rem 0 1rem 0;
       background: linear-gradient(
         to right,
         var(--gradient-start, #a29bfe),
@@ -397,7 +440,7 @@ function getConditionClass(condition: string): string {
         var(--gradient-end, #fd79a8)
       );
       color: white;
-      padding: 0.3rem 1rem;
+      padding: 0.4rem 1.2rem;
       border-radius: 20px;
       font-size: 0.9rem;
       display: inline-block;
@@ -407,10 +450,10 @@ function getConditionClass(condition: string): string {
     }
     
     .recommendation-panel {
-      background-color: rgba(15, 15, 25, 0.7);
+      background-color: rgba(15, 15, 25, 0.8);
       border-radius: 12px;
       padding: 1.5rem;
-      margin-bottom: 2rem;
+      margin-bottom: 2.5rem;
       border: 1px solid rgba(255, 255, 255, 0.05);
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     }
@@ -437,13 +480,13 @@ function getConditionClass(condition: string): string {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 1.5rem;
-      margin-bottom: 2rem;
+      margin-bottom: 2.5rem;
     }
 
     .forecast-day {
-      background: linear-gradient(145deg, rgba(30, 30, 40, 0.8), rgba(20, 20, 30, 0.8));
+      background: linear-gradient(145deg, rgba(35, 35, 50, 0.8), rgba(25, 25, 40, 0.8));
       border-radius: 16px;
-      padding: 1.8rem 1.2rem;
+      padding: 1.5rem 1rem;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -513,17 +556,17 @@ function getConditionClass(condition: string): string {
     .day-name {
       font-weight: bold;
       margin-bottom: 0.75rem;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       color: #e0e0e0;
     }
 
     .weather-icon {
-      font-size: 3rem;
+      font-size: 2.8rem;
       margin: 0.5rem 0 0.75rem 0;
     }
 
     .temp {
-      font-size: 2.5rem;
+      font-size: 2.2rem;
       font-weight: bold;
       margin: 0.25rem 0;
       color: #fff;
@@ -531,7 +574,7 @@ function getConditionClass(condition: string): string {
     }
 
     .temp-range {
-      font-size: 1rem;
+      font-size: 0.9rem;
       color: #ccc;
       margin-bottom: 1rem;
     }
@@ -539,9 +582,9 @@ function getConditionClass(condition: string): string {
     /* Condition Tag Styles (Enhanced) */
     .condition {
       font-weight: 600;
-      padding: 0.5rem 1.2rem;
+      padding: 0.4rem 1rem;
       border-radius: 25px;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       margin: 0.75rem 0;
       color: #000;
       background-color: #ccc;
@@ -577,10 +620,7 @@ function getConditionClass(condition: string): string {
     }
 
     .description {
-      font-size: 0.9rem;
-      color: #bbb;
-      margin: 0.5rem 0;
-      line-height: 1.4;
+      display: none;
     }
 
     .precipitation {
@@ -779,71 +819,322 @@ function getConditionClass(condition: string): string {
         spin 1s linear infinite,
         rainbow 15s ease infinite;
     }
+
+    /* Add new styles for trails */
+    .trails-section {
+      margin-top: 2.5rem;
+      padding: 1.5rem;
+      background-color: rgba(15, 15, 25, 0.7);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .trails-section h2 {
+      color: var(--color-text);
+      margin-bottom: 1.5rem;
+      text-align: center;
+      font-size: 1.8rem;
+    }
+
+    .trails-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      padding: 0;
+    }
+
+    .trail-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 1.2rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, background-color 0.2s;
+      border: 1px solid transparent;
+    }
+
+    .trail-card:hover {
+      transform: translateY(-4px);
+      background-color: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .trail-card h3 {
+      margin: 0 0 0.25rem 0;
+      color: var(--color-text);
+      font-size: 1.1rem;
+    }
+
+    .trail-location {
+      color: var(--color-text-light);
+      font-size: 0.85rem;
+      margin: 0.5rem 0;
+    }
+
+    .trail-details {
+      display: flex;
+      gap: 1rem;
+      margin: 0.8rem 0;
+      font-size: 0.85rem;
+    }
+
+    .difficulty {
+      padding: 0.2rem 0.6rem;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      font-weight: 500;
+    }
+    
+    .length {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .trail-description {
+      font-size: 0.9rem;
+      color: var(--color-text-light);
+      margin: 0.5rem 0 0;
+      line-height: 1.5;
+    }
+
+    /* Enhance weather details */
+    .weather-details {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.6rem;
+      margin-top: 0.8rem;
+      font-size: 0.85rem;
+      color: var(--color-text-light);
+      width: 100%;
+      padding: 0 0.5rem;
+    }
+
+    .weather-details > div {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    /* Style for the AI Narrative section */
+    .ai-narrative {
+      margin-top: 1rem;
+      padding: 1rem;
+      background-color: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: center;
+      min-height: 3em; /* Reserve some space */
+      display: flex; /* Use flex for alignment */
+      align-items: center; /* Center vertically */
+      justify-content: center; /* Center horizontally */
+    }
+
+    .ai-narrative .ai-icon {
+      display: inline-block;
+      margin-right: 0.5rem;
+      font-size: 1.2rem;
+      /* Optional: Apply subtle animation */
+      animation: pulse 2s infinite ease-in-out;
+      flex-shrink: 0; /* Prevent icon from shrinking */
+    }
+
+    .ai-narrative p {
+      /* display: inline; */ /* Remove display inline */
+      color: #c3c3e6; /* A slightly different color for AI text */
+      font-style: italic;
+      line-height: 1.5;
+      margin: 0;
+      flex-grow: 1; /* Allow text to take available space */
+      text-align: left; /* Align text left */
+    }
+
+    /* Style for loading/error state */
+    .ai-narrative .placeholder {
+      color: #aaa;
+      font-style: italic;
+      width: 100%; /* Ensure placeholder takes full width */
+      text-align: center;
+    }
+
+    /* Typewriter cursor */
+    .typewriter::after {
+        content: '|';
+        animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+        from, to { opacity: 1 }
+        50% { opacity: 0 }
+    }
+
+    .recommendation-panel {
+      padding-bottom: 1rem;
+    }
+
+    /* Style for condition tags (ensure storm is handled) */
+    .condition.storm {
+      background-color: #8a2be2;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(138, 43, 226, 0.4);
+    }
+
+    /* Adjust precipitation display in weather details */
+    .weather-details > div:last-child {
+      grid-column: span 2;
+      text-align: center;
+    }
+
+    /* Trail Card Link Style */
+    .trail-card-link {
+      text-decoration: none; /* Remove underline */
+      color: inherit; /* Inherit text color */
+      display: block; /* Ensure the link fills the grid area */
+      border-radius: 12px; /* Match card radius */
+      transition: transform 0.3s ease, box-shadow 0.3s ease; /* Add smooth hover effect */
+    }
+    
+    .trail-card-link:hover,
+    .trail-card-link:focus {
+      transform: translateY(-5px); /* Lift card on hover */
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); /* Enhance shadow on hover */
+      outline: none; /* Remove focus outline if desired */
+    }
+    
+    .trail-card-link:focus-visible {
+        outline: 2px solid var(--gradient-start, #a29bfe); /* Add visible focus indicator */
+        outline-offset: 2px;
+    }
   </style>
 
   <script>
-    // Page transition effect
+    // --- Page transition effect & other setup (existing logic combined) ---
     document.addEventListener('DOMContentLoaded', () => {
       const overlay = document.getElementById('page-transition-overlay');
-      const forecastContent = document.getElementById('forecast-content');
       const backButton = document.getElementById('back-button');
       const backToMapButton = document.getElementById('back-to-map');
       const shareButton = document.getElementById('share-button');
-      
-      // Handle back button click with transition
+      const locationNameElement = document.querySelector('.location-header h1');
+      const locationName = locationNameElement ? locationNameElement.textContent : 'this location';
+      const recommendationElement = document.querySelector('.recommendation-text');
+      const recommendationTextContent = recommendationElement?.textContent?.trim() || 'Check out this forecast!';
+
+      // Back navigation handler
       const handleBackNavigation = () => {
-        // Show overlay
         if (overlay) {
           overlay.classList.add('fade-in');
-          
-          // Wait for overlay to fade in, then navigate
-          setTimeout(() => {
-            window.location.href = '/map';
-          }, 500);
+          setTimeout(() => { window.location.href = '/map'; }, 500);
         } else {
           window.location.href = '/map';
         }
       };
-      
-      if (backButton) {
-        backButton.addEventListener('click', handleBackNavigation);
-      }
-      
-      if (backToMapButton) {
-        backToMapButton.addEventListener('click', handleBackNavigation);
-      }
-      
-      // Handle share button click
+      if (backButton) backButton.addEventListener('click', handleBackNavigation);
+      if (backToMapButton) backToMapButton.addEventListener('click', handleBackNavigation);
+
+      // Share button handler
       if (shareButton) {
         shareButton.addEventListener('click', () => {
           if (navigator.share) {
             navigator.share({
-              title: 'Weather Forecast',
-              text: 'Check out this weather forecast!',
+              title: `Weather in ${locationName}`,
+              text: recommendationTextContent,
               url: window.location.href
             })
-            .catch(err => {
-              console.error('Share failed:', err);
-              alert('Sharing is not available on this device or browser.');
-            });
+            .catch(err => { console.error('Share failed:', err); alert('Sharing failed.'); });
           } else {
-            // Fallback for browsers that don't support the Web Share API
+            // Clipboard fallback
             const dummy = document.createElement('textarea');
             dummy.value = window.location.href;
             document.body.appendChild(dummy);
             dummy.select();
             document.execCommand('copy');
             document.body.removeChild(dummy);
-            
-            // Change button text temporarily
             const originalText = shareButton.innerHTML;
             shareButton.innerHTML = '<span class="button-icon">✓</span> URL Copied!';
-            setTimeout(() => {
-              shareButton.innerHTML = originalText;
-            }, 2000);
+            setTimeout(() => { shareButton.innerHTML = originalText; }, 2000);
           }
         });
       }
+
+      // --- Fetch AI Narrative Client-Side ---
+      const narrativeContainer = document.querySelector('.ai-narrative');
+      const narrativeParagraph = narrativeContainer?.querySelector('p');
+
+      if (narrativeContainer && narrativeParagraph) {
+        // Get params from current URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const lat = urlParams.get('lat');
+        const lon = urlParams.get('lon');
+        const pref = urlParams.get('pref');
+
+        if (lat && lon && pref) {
+          const apiUrl = new URL('/api/weather', window.location.origin);
+          apiUrl.searchParams.set('lat', lat);
+          apiUrl.searchParams.set('lon', lon);
+          apiUrl.searchParams.set('pref', pref);
+          apiUrl.searchParams.set('generateNarrative', 'true');
+
+          // Function for typewriter effect
+          function typeWriter(element: Element, text: string, speed = 30) {
+              let i = 0;
+              element.innerHTML = ''; // Clear existing text
+              element.classList.add('typewriter');
+              function type() {
+                  if (i < text.length) {
+                      element.innerHTML += text.charAt(i);
+                      i++;
+                      setTimeout(type, speed);
+                  } else {
+                      element.classList.remove('typewriter'); // Remove cursor when done
+                  }
+              }
+              type();
+          }
+
+          // Set initial loading state
+          if (narrativeParagraph instanceof Element) {
+            narrativeParagraph.innerHTML = 'Generating AI insights...';
+            narrativeParagraph.className = 'placeholder'; // Use class for placeholder styling
+
+            // Fetch the narrative
+            fetch(apiUrl.toString())
+              .then(response => {
+                if (!response.ok) {
+                  // Try to parse error json, fallback to status text
+                  return response.json().catch(() => ({ error: `API Error ${response.status}` })).then(err => { throw new Error(err.error || `API Error: ${response.status}`) });
+                }
+                return response.json();
+              })
+              .then(data => {
+                narrativeParagraph.className = ''; // Reset class before typing
+                if (data.recommendation?.aiNarrative && typeof data.recommendation.aiNarrative === 'string') {
+                  // Start typewriter effect only if narrative is a string
+                  typeWriter(narrativeParagraph, data.recommendation.aiNarrative);
+                } else {
+                  narrativeParagraph.textContent = 'AI insights could not be generated.';
+                  narrativeParagraph.className = 'placeholder'; // Re-apply placeholder style
+                }
+              })
+              .catch(error => {
+                console.error('Error fetching AI narrative:', error);
+                narrativeParagraph.className = 'placeholder'; // Use placeholder style for error
+                narrativeParagraph.textContent = `Error loading AI insights.`;
+                narrativeParagraph.style.color = '#ff8a8a'; // Make error red
+              });
+          } else {
+            console.error("Narrative paragraph element not found or not an Element");
+          }
+        } else {
+            // Handle case where params are missing client-side
+            if (narrativeParagraph) { // Check if paragraph exists before setting text
+              narrativeParagraph.textContent = 'Missing parameters for AI insights.';
+              narrativeParagraph.className = 'placeholder';
+            }
+        }
+      } else {
+        console.error("AI narrative container or paragraph element not found.");
+      }
+
     });
   </script>
 </BaseLayout> 
