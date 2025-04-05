@@ -1,1 +1,1 @@
-IM A GOD DAMN SIGMA
+Please run locally using npm run dev.
