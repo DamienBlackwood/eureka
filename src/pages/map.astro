@@ -1,0 +1,457 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// Ensure server-side rendering
+export const prerender = false;
+---
+
+<BaseLayout title="Your Map & Weather">
+  <main class="container fade-in" id="map-page-content">
+    <h2 id="location-display">Detecting location...</h2>
+    <div id="map" style="height: 400px; width: 80%; max-width: 600px; margin: 1rem auto; border-radius: 8px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);"></div>
+
+    <div id="questionnaire" style="margin-top: 2rem;">
+      <h3>What kind of weather do you prefer for exploring?</h3>
+      <div class="options" style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <button data-preference="sunny">☀️ Sunny</button>
+        <button data-preference="clear">✨ Clear</button>
+        <button data-preference="cloudy">☁️ Cloudy</button>
+        <button data-preference="rainy">🌧️ Rainy</button>
+        <button data-preference="warm">🌡️ Warm</button>
+        <button data-preference="cool">❄️ Cool</button>
+      </div>
+    </div>
+
+    <div id="results" style="margin-top: 2rem; opacity: 0; transition: opacity 0.5s ease-in-out;">
+      <!-- Results will be displayed here -->
+    </div>
+  </main>
+
+  <!-- Leaflet CSS must come before the JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""/>
+    
+  <!-- Leaflet JavaScript -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+   integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+   crossorigin=""></script>
+
+  <style>
+    /* Keep the fade-in animation specific to this page if needed,
+       or rely on the global one if you prefer */
+    .fade-in {
+      animation: fadeIn 0.5s ease-in-out forwards;
+    }
+
+    /* Add specific styles for the map page if necessary */
+    #map, #questionnaire {
+      transition: opacity 0.5s ease-in-out;
+    }
+    .fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #results {
+        transition: opacity 0.5s ease-in-out;
+        /* Ensure results container allows centering */
+        display: flex; 
+        justify-content: center;
+        align-items: center;
+        min-height: 150px; /* Give it some height */
+    }
+    #results button {
+        /* Basic button styling */
+        padding: 0.6rem 1.2rem;
+        margin-top: 1rem;
+        border: 1px solid var(--gradient-start, #a29bfe);
+        background-color: rgba(255, 255, 255, 0.1);
+        color: var(--color-text, #e0e0e0);
+        border-radius: 20px;
+        cursor: pointer;
+        transition: background-color 0.3s, transform 0.2s;
+    }
+    #results button:hover {
+        background-color: rgba(162, 155, 254, 0.2);
+        transform: translateY(-2px);
+    }
+  </style>
+
+  <script is:inline>
+    // Global variables to avoid redeclaration issues
+    let map = null;
+    let currentLocation = null;
+    let locationTimeout = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM fully loaded and parsed');
+
+      const mapElement = document.getElementById('map');
+      const locationDisplay = document.getElementById('location-display');
+      const questionnaireElement = document.getElementById('questionnaire');
+      const questionnaireOptions = document.querySelectorAll('#questionnaire .options button');
+      const resultsDisplay = document.getElementById('results');
+
+      // Check for Leaflet availability
+      if (typeof L === 'undefined') {
+        console.error("Leaflet library not loaded");
+        locationDisplay.textContent = 'Error: Map library failed to load. Please refresh the page.';
+        return;
+      }
+
+      function initializeMap(lat, lon) {
+        try {
+          // Ensure coordinates are valid numbers
+          lat = parseFloat(lat);
+          lon = parseFloat(lon);
+          
+          if (isNaN(lat) || isNaN(lon)) {
+            throw new Error(`Invalid coordinates: lat=${lat}, lon=${lon}`);
+          }
+          
+          // Store coordinates in a format that's ready for API calls
+          currentLocation = { 
+            lat: parseFloat(lat.toFixed(6)), 
+            lon: parseFloat(lon.toFixed(6)) 
+          };
+          
+          console.log(`Setting currentLocation:`, currentLocation);
+          
+          if (!mapElement) {
+            throw new Error('Map container not found');
+          }
+
+          if (!map) {
+            map = L.map(mapElement).setView([lat, lon], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+          } else {
+            map.setView([lat, lon], 13);
+          }
+
+          // Clear existing markers
+          map.eachLayer((layer) => {
+            if (layer instanceof L.Marker) {
+              map.removeLayer(layer);
+            }
+          });
+
+          // Add new marker
+          L.marker([lat, lon])
+            .addTo(map)
+            .bindPopup('Your location')
+            .openPopup();
+
+          locationDisplay.textContent = `Your Location (Lat: ${lat.toFixed(4)}, Lon: ${lon.toFixed(4)})`;
+          console.log('Map initialized successfully at:', currentLocation);
+          
+          // Enable questionnaire buttons once location is set
+          questionnaireOptions.forEach(button => {
+            button.disabled = false;
+            button.style.opacity = '1';
+          });
+
+        } catch (error) {
+          console.error('Map initialization error:', error);
+          locationDisplay.textContent = 'Error: Could not display map. Please refresh the page.';
+        }
+      }
+
+      function handleLocationError(error) {
+        console.error('Location error:', error);
+        clearTimeout(locationTimeout);
+        
+        let errorMessage = 'Could not get your location. ';
+        switch (error.code) {
+          case 1:
+            errorMessage += 'Please allow location access and refresh the page.';
+            break;
+          case 2:
+            errorMessage += 'Position unavailable. Using default location.';
+            break;
+          case 3:
+            errorMessage += 'Request timed out. Using default location.';
+            break;
+          default:
+            errorMessage += 'Using default location.';
+        }
+        
+        locationDisplay.textContent = errorMessage;
+        
+        // Use default location (New York City with proper formatting)
+        console.log('Using default location (New York City)');
+        initializeMap(40.7128, -74.0060);
+      }
+
+      function resetView() {
+        if (resultsDisplay) {
+          resultsDisplay.style.opacity = '0';
+          setTimeout(() => { resultsDisplay.innerHTML = ''; }, 500);
+        }
+        if (mapElement) mapElement.classList.remove('fade-out');
+        if (questionnaireElement) questionnaireElement.classList.remove('fade-out');
+        
+        questionnaireOptions.forEach(button => {
+          button.disabled = false;
+          button.style.opacity = '1';
+          button.style.pointerEvents = 'auto';
+        });
+      }
+
+      /**
+       * Call the weather API with proper error handling and retries
+       * @param {Object} coordinates - The location coordinates
+       * @param {string} weatherPreference - The preferred weather type
+       * @returns {Promise<Object>} - The weather data
+       */
+      async function callWeatherAPI(coordinates, weatherPreference) {
+        // Input validation
+        if (!coordinates || typeof coordinates.lat !== 'number' || typeof coordinates.lon !== 'number') {
+          throw new Error('Invalid coordinates provided to API caller');
+        }
+        
+        if (!weatherPreference || typeof weatherPreference !== 'string') {
+          throw new Error('Invalid weather preference');
+        }
+
+        // Format coordinates to 6 decimal places
+        const lat = parseFloat(coordinates.lat.toFixed(6));
+        const lon = parseFloat(coordinates.lon.toFixed(6));
+        
+        // Determine base URL (with origin for absolute path)
+        const origin = window.location.origin;
+        const apiEndpoint = '/api/weather';
+        
+        // Construct URL with explicitly appended query parameters (avoiding URLSearchParams issues)
+        const fullUrl = `${origin}${apiEndpoint}?lat=${lat}&lon=${lon}&pref=${encodeURIComponent(weatherPreference)}`;
+        
+        console.log(`Making API request to: ${fullUrl}`);
+        
+        // Variables for retry logic
+        const maxRetries = 3;
+        let retryCount = 0;
+        let lastError = null;
+        
+        // Retry loop
+        while (retryCount < maxRetries) {
+          try {
+            // First attempt - standard fetch with headers
+            let response = await fetch(fullUrl, {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+              },
+              cache: 'no-store' // Ensure no caching
+            });
+            
+            // If that fails with a network error (not a 400/500), try a simpler fetch
+            if (!response.ok && (retryCount === maxRetries - 1)) {
+              console.log("Trying simpler fetch as last resort");
+              // Direct XMLHttpRequest as absolute last resort
+              response = await new Promise((resolve) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', fullUrl, true);
+                xhr.onload = function() {
+                  resolve({
+                    ok: xhr.status >= 200 && xhr.status < 300,
+                    status: xhr.status,
+                    text: async () => xhr.responseText,
+                    json: async () => JSON.parse(xhr.responseText)
+                  });
+                };
+                xhr.onerror = function() {
+                  resolve({
+                    ok: false,
+                    status: 0,
+                    text: async () => "Network error",
+                    json: async () => ({ error: "Network error" })
+                  });
+                };
+                xhr.send();
+              });
+            }
+            
+            // Handle HTTP errors
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`API HTTP error (${response.status}):`, errorText);
+              throw new Error(`API request failed with status ${response.status}`);
+            }
+            
+            // Parse response
+            const data = await response.json();
+            
+            // Validate response structure
+            if (!data || (data.error && typeof data.error === 'string')) {
+              console.error('API returned error:', data.error);
+              throw new Error(data.error || 'Invalid response from API');
+            }
+            
+            if (!data.forecast || !Array.isArray(data.forecast) || data.forecast.length === 0) {
+              console.error('API response missing forecast data');
+              throw new Error('Weather forecast data is missing or invalid');
+            }
+            
+            console.log('API request successful:', {
+              location: data.location,
+              recommendation: data.recommendation
+            });
+            
+            return data;
+          } catch (error) {
+            lastError = error;
+            retryCount++;
+            
+            console.warn(`API request attempt ${retryCount} failed:`, error.message);
+            
+            if (retryCount < maxRetries) {
+              // Exponential backoff: 1s, 2s, 4s, etc.
+              const delay = Math.pow(2, retryCount - 1) * 1000;
+              console.log(`Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+        }
+        
+        // If we get here, all retries failed
+        console.error('All API request attempts failed');
+        throw lastError || new Error('Failed to fetch weather data after multiple attempts');
+      }
+
+      async function handlePreferenceSelection(preference) {
+        // Location validation
+        if (!currentLocation) {
+          console.warn('Location not available');
+          resultsDisplay.style.opacity = '1';
+          resultsDisplay.innerHTML = '<p style="text-align: center;">Please wait for location detection...</p>';
+          return;
+        }
+        
+        // Double-check that coordinates are valid
+        if (isNaN(currentLocation.lat) || isNaN(currentLocation.lon)) {
+          console.error('Invalid location coordinates:', currentLocation);
+          resultsDisplay.style.opacity = '1';
+          resultsDisplay.innerHTML = '<p style="text-align: center; color: red;">Error: Invalid location coordinates. Please refresh and try again.</p>';
+          return;
+        }
+
+        // Disable buttons
+        questionnaireOptions.forEach(button => {
+          button.disabled = true;
+          button.style.opacity = '0.5';
+          button.style.pointerEvents = 'none';
+        });
+
+        mapElement.classList.add('fade-out');
+        questionnaireElement.classList.add('fade-out');
+
+        resultsDisplay.innerHTML = `
+          <div style="text-align: center;">
+            <p>Finding the best day for <strong>${preference}</strong> weather...</p>
+            <div class="loading-spinner" style="margin: 1rem auto;"></div>
+          </div>
+        `;
+        resultsDisplay.style.opacity = '1';
+
+        try {
+          console.log(`Initiating weather data request for preference: ${preference}`);
+          console.log('Using coordinates:', currentLocation);
+          
+          const weatherData = await callWeatherAPI(currentLocation, preference);
+          
+          let resultHTML = '';
+          if (weatherData.recommendation?.bestDay) {
+            const { date, avgTemp, condition } = weatherData.recommendation.bestDay;
+            const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
+            const dateString = new Date(date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+            const locationName = weatherData.location?.name ? ` in ${weatherData.location.name}` : '';
+
+            resultHTML = `
+              <div style="text-align: center;">
+                <p>The best day for <strong>${preference}</strong> weather${locationName} is <strong>${dayName}, ${dateString}</strong>.</p>
+                <p>Expect ${condition?.toLowerCase() || 'pleasant'} conditions with temperatures around ${avgTemp?.toFixed(0)}°C.</p>
+                <button onclick="window.location.reload()">Check Another Day</button>
+              </div>
+            `;
+          } else {
+            resultHTML = `
+              <div style="text-align: center;">
+                <p>Sorry, couldn't find ideal ${preference} weather in the forecast.</p>
+                <button onclick="window.location.reload()">Try Again</button>
+              </div>
+            `;
+          }
+
+          resultsDisplay.innerHTML = resultHTML;
+
+        } catch (error) {
+          console.error('Weather data request failed:', error);
+          resultsDisplay.innerHTML = `
+            <div style="text-align: center; color: red;">
+              <p>Error: ${error.message}</p>
+              <p>Please check the console for details.</p>
+              <button onclick="window.location.reload()">Try Again</button>
+            </div>
+          `;
+        }
+      }
+
+      // Set up location timeout
+      locationTimeout = setTimeout(() => {
+        if (!currentLocation) {
+          console.warn("Location request timed out after 10 seconds");
+          handleLocationError({ code: 3, message: 'Location request timed out' });
+        }
+      }, 10000); // 10 second timeout
+
+      // Initialize location detection
+      if ('geolocation' in navigator) {
+        console.log('Requesting location from browser geolocation API...');
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            clearTimeout(locationTimeout);
+            console.log('Location received:', position.coords);
+            
+            // Ensure coordinates are proper numbers
+            const lat = parseFloat(position.coords.latitude.toFixed(6));
+            const lon = parseFloat(position.coords.longitude.toFixed(6));
+            
+            console.log(`Initializing map with coordinates: ${lat}, ${lon}`);
+            initializeMap(lat, lon);
+          },
+          (error) => {
+            console.error('Geolocation error:', error);
+            handleLocationError(error);
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          }
+        );
+      } else {
+        console.error('Browser does not support geolocation');
+        handleLocationError({ code: 0, message: 'Geolocation not supported' });
+      }
+
+      // Set up preference button listeners
+      questionnaireOptions.forEach(button => {
+        // Initially disable buttons until location is set
+        button.disabled = true;
+        button.style.opacity = '0.7';
+        
+        button.addEventListener('click', () => {
+          const preference = button.getAttribute('data-preference');
+          if (preference) {
+            handlePreferenceSelection(preference);
+          }
+        });
+      });
+
+    }); // End of DOMContentLoaded
+  </script>
+</BaseLayout> 

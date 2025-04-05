@@ -1,0 +1,212 @@
+:root {
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --color-bg: #0a0a0a;
+  --color-text: #e0e0e0;
+  --color-primary: #6c5ce7; /* Example primary color */
+  --color-secondary: #fd79a8; /* Example secondary color */
+  --gradient-start: #a29bfe;
+  --gradient-start-rgb: 162, 155, 254; /* RGB values for gradient start */
+  --gradient-end: #fd79a8;
+  --gradient-end-rgb: 253, 121, 168; /* RGB values for gradient end */
+  --glow-color: rgba(162, 155, 254, 0.5); /* Example glow color based on gradient */
+}
+
+html {
+  box-sizing: border-box;
+}
+
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+}
+
+button {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 0.8em 1.5em;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out forwards;
+}
+
+.fade-out {
+  animation: fadeOut 0.5s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+#map {
+  height: 400px;
+  width: 80%;
+  max-width: 600px;
+  margin-top: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Enhanced Weather Display Styles */
+.seasonal-context {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  text-align: center;
+  font-style: italic;
+  color: #ddd;
+}
+
+.forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+  width: 100%;
+}
+
+.forecast-day {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+/* Style for Today's forecast */
+.forecast-day.today {
+  background: rgba(var(--gradient-start-rgb, 162, 155, 254), 0.15);
+  border: 1px solid rgba(var(--gradient-start-rgb, 162, 155, 254), 0.3);
+  box-shadow: 0 0 15px rgba(var(--gradient-start-rgb, 162, 155, 254), 0.2);
+  transform: scale(1.03);
+}
+
+.forecast-day.today .day-name {
+  color: var(--gradient-start, #a29bfe);
+  font-weight: bold;
+  position: relative;
+}
+
+.forecast-day.today .day-name::after {
+  content: '•';
+  display: inline-block;
+  margin-left: 5px;
+  color: var(--gradient-start, #a29bfe);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+.forecast-day:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.forecast-day.today:hover {
+  transform: translateY(-5px) scale(1.03);
+}
+
+.day-name {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.weather-icon {
+  width: 50px;
+  height: 50px;
+  margin: 0.5rem 0;
+}
+
+.temp {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0.5rem 0;
+}
+
+.temp-range {
+  font-size: 0.9rem;
+  color: #ccc;
+  margin-bottom: 0.5rem;
+}
+
+.condition {
+  font-weight: bold;
+  padding: 0.3rem 0.8rem;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  margin: 0.5rem 0;
+}
+
+.condition.favorable {
+  background-color: rgba(72, 199, 142, 0.2);
+  border: 1px solid rgba(72, 199, 142, 0.5);
+  color: #48c78e;
+}
+
+.condition.unfavorable {
+  background-color: rgba(241, 70, 104, 0.2);
+  border: 1px solid rgba(241, 70, 104, 0.5);
+  color: #f14668;
+}
+
+.condition.neutral {
+  background-color: rgba(108, 117, 125, 0.2);
+  border: 1px solid rgba(108, 117, 125, 0.5);
+  color: #adb5bd;
+}
+
+.description {
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0.3rem 0;
+  color: #bbb;
+}
+
+.precipitation {
+  font-size: 0.85rem;
+  color: #8ab4f8;
+  margin-top: 0.3rem;
+}
+
+#detailed-forecast {
+  width: 100%;
+  max-width: 800px;
+  margin: 1.5rem auto;
+  transition: opacity 0.3s ease;
+}
+
+#show-more-button {
+  display: block;
+  margin: 1rem auto;
+} 

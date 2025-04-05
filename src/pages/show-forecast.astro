@@ -1,0 +1,849 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// Get query parameters
+const { searchParams } = Astro.url;
+const lat = searchParams.get('lat');
+const lon = searchParams.get('lon');
+const pref = searchParams.get('pref') || 'preferred';
+const city = searchParams.get('city') || 'Your Location';
+
+let forecastData = null;
+let error = null;
+let recommendationText = '';
+let seasonalAverageText = '';
+let locationName = decodeURIComponent(city); // Use the provided city name
+let isLoading = true;
+
+if (lat && lon) {
+  try {
+    // Parse coordinates to ensure they're valid numbers
+    const latNum = parseFloat(lat);
+    const lonNum = parseFloat(lon);
+    
+    if (isNaN(latNum) || isNaN(lonNum)) {
+      throw new Error("Invalid coordinates format");
+    }
+    
+    // Construct the API URL correctly
+    const apiUrl = new URL('/api/weather', Astro.url.origin);
+    apiUrl.search = new URLSearchParams({
+      lat: latNum.toString(),
+      lon: lonNum.toString(),
+      pref: encodeURIComponent(pref)
+    }).toString();
+    console.log(`Fetching forecast from: ${apiUrl}`);
+
+    // Fetch on the server-side
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`API Error Body: ${errorBody}`);
+        throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+    }
+
+    forecastData = await response.json();
+    isLoading = false;
+    
+    // Generate recommendation text
+    if (forecastData.recommendation && forecastData.recommendation.bestDay) {
+      const { date, avgTemp, condition } = forecastData.recommendation.bestDay;
+      const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
+      const dateString = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      recommendationText = `In the next ${forecastData.forecast?.length || 5} days, ${dayName}, ${dateString} looks best for '${pref}' weather. It's expected to be ${condition?.toLowerCase() || 'pleasant'} with an average temperature around ${avgTemp?.toFixed(0)}°C.`;
+    } else {
+      recommendationText = `Could not determine the best day for '${pref}' weather based on the forecast.`;
+    }
+
+    // Get seasonal average text
+    if (forecastData.seasonalAverage) {
+      seasonalAverageText = `Current seasonal average: ${forecastData.seasonalAverage.temp.toFixed(1)}°C (${forecastData.seasonalAverage.season})`;
+    } else {
+      seasonalAverageText = 'Seasonal data not available';
+    }
+
+  } catch (error: any) {
+    console.error("Error fetching or processing forecast:", error);
+    error = `Failed to load forecast data: ${error.message}`;
+    isLoading = false;
+  }
+} else {
+  error = "Location parameters (latitude and longitude) are missing. Please return to the map and try again.";
+  isLoading = false;
+}
+
+// Helper function to format date
+function formatDate(dateString: string, format = 'short'): string {
+    const date = new Date(dateString);
+    if (format === 'short') {
+        return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }); // e.g., Sun, 6
+    }
+    // Add other formats if needed
+    return date.toLocaleDateString();
+}
+
+// Helper function to determine if a day is 'Today'
+function isToday(dateString: string): boolean {
+    const today = new Date();
+    const date = new Date(dateString);
+    return today.toDateString() === date.toDateString();
+}
+
+// Helper to map condition text to icon
+function getWeatherIcon(condition: string): string {
+    const lowerCondition = (condition || '').toLowerCase();
+    if (lowerCondition.includes('rain') || lowerCondition.includes('drizzle')) return '🌧️';
+    if (lowerCondition.includes('snow')) return '❄️';
+    if (lowerCondition.includes('cloud') || lowerCondition.includes('overcast')) return '☁️';
+    if (lowerCondition.includes('clear') || lowerCondition.includes('sunny')) return '☀️';
+    if (lowerCondition.includes('fog') || lowerCondition.includes('mist')) return '🌫️';
+    return '❓'; // Default unknown icon
+}
+
+// Helper to determine condition style class
+function getConditionClass(condition: string): string {
+    const lowerCondition = (condition || '').toLowerCase();
+    if (lowerCondition.includes('rain')) return 'rain';
+    if (lowerCondition.includes('snow')) return 'snow';
+    if (lowerCondition.includes('clear')) return 'clear';
+    if (lowerCondition.includes('cloud')) return 'clouds';
+    return 'default-condition';
+}
+---
+
+<BaseLayout title={`Weather Forecast | ${locationName}`}>
+  <div id="page-transition-overlay" class="page-overlay"></div>
+  
+  <div class="app-container">
+    <header class="app-header">
+      <div class="logo">
+        <span class="logo-icon">🌦️</span>
+        <span class="logo-text">WeatherExplorer</span>
+      </div>
+    </header>
+    
+    <main class="forecast-container">
+      {error && (
+        <div class="error-container">
+          <div class="error-message">
+            <div class="error-icon">⚠️</div>
+            <p>{error}</p>
+            <button id="back-to-map" class="back-button error-back-button">Return to Map</button>
+          </div>
+        </div>
+      )}
+  
+      {isLoading && (
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>Loading your forecast...</p>
+        </div>
+      )}
+  
+      {forecastData && forecastData.forecast && (
+        <div id="forecast-content" class="forecast-content">
+          <div class="location-header">
+            <div class="location-breadcrumb">
+              <a href="/" class="home-link">Home</a> &gt; <a href="/map" class="map-link">Map</a> &gt; <span class="current-page">Forecast</span>
+            </div>
+            <h1>{locationName}</h1>
+            <div class="preference-tag">{pref}</div>
+          </div>
+          
+          <div class="recommendation-panel">
+            <p class="recommendation-text">{recommendationText}</p>
+            <p class="seasonal-context">{seasonalAverageText}</p>
+          </div>
+  
+          <div class="forecast-grid">
+            {forecastData.forecast.map((day: any, index: number) => {
+              const todayClass = isToday(day.date) ? 'today' : '';
+              const conditionClass = getConditionClass(day.condition);
+              return (
+                <div class={`forecast-day ${todayClass}`}>
+                  <div class="day-name">{isToday(day.date) ? 'Today' : formatDate(day.date, 'short')}</div>
+                  <div class="weather-icon">{getWeatherIcon(day.condition)}</div>
+                  <div class="temp">{day.avgTemp?.toFixed(0)}°C</div>
+                  <div class="temp-range">H:{day.maxTemp?.toFixed(0)}° L:{day.minTemp?.toFixed(0)}°</div>
+                  <div class={`condition ${conditionClass}`}>{day.condition}</div>
+                  <div class="description">{day.description || `Cloud cover: ${day.cloudCover?.toFixed(0)}%`}</div>
+                  {day.precipitation > 0 && (
+                    <div class="precipitation">Rain: {day.precipitation?.toFixed(1)}mm</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+  
+          <div class="action-buttons">
+            <button id="back-button" class="back-button">
+              <span class="button-icon">←</span> Back to Map
+            </button>
+            <button id="share-button" class="share-button">
+              <span class="button-icon">↗️</span> Share Forecast
+            </button>
+          </div>
+        </div>
+      )}
+    </main>
+    
+    <footer class="app-footer">
+      <p>© 2024 WeatherExplorer | Weather data provided for educational purposes</p>
+    </footer>
+  </div>
+
+  <style>
+    /* Page Transition Styles */
+    .page-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--color-bg, #0a0a0a);
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+
+    .page-overlay.fade-in {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* App Layout */
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    
+    .app-header {
+      background-color: rgba(15, 15, 25, 0.8);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .logo-icon {
+      font-size: 1.5rem;
+    }
+    
+    .logo-text {
+      font-size: 1.2rem;
+      font-weight: bold;
+      background: linear-gradient(
+        to right,
+        var(--gradient-start, #a29bfe),
+        var(--gradient-end, #fd79a8)
+      );
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .app-footer {
+      margin-top: auto;
+      background-color: rgba(15, 15, 25, 0.8);
+      padding: 1rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #999;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Loading Styles */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 50vh;
+      color: var(--color-text, #e0e0e0);
+    }
+
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border-top-color: var(--gradient-start, #a29bfe);
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Error Styles */
+    .error-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 50vh;
+    }
+    
+    .error-message {
+      background-color: rgba(241, 70, 104, 0.1);
+      border: 1px solid rgba(241, 70, 104, 0.3);
+      padding: 2rem;
+      border-radius: 10px;
+      text-align: center;
+      max-width: 600px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      animation: fadeInUp 0.5s ease-out forwards;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .error-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    
+    .error-back-button {
+      margin-top: 1.5rem;
+    }
+
+    /* General Styles for Forecast Page */
+    .forecast-container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      color: var(--color-text, #e0e0e0);
+      flex: 1;
+    }
+
+    .forecast-content {
+      background-color: rgba(20, 20, 30, 0.6);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+      padding: 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transform: translateY(20px);
+      opacity: 0;
+      animation: slideUpFade 0.6s ease-out forwards 0.2s;
+    }
+    
+    .location-breadcrumb {
+      display: flex;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      color: #aaa;
+    }
+    
+    .home-link, .map-link {
+      color: #bbb;
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    
+    .home-link:hover, .map-link:hover {
+      color: var(--gradient-start, #a29bfe);
+      text-decoration: underline;
+    }
+    
+    .current-page {
+      color: #fff;
+    }
+
+    .location-header {
+      text-align: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
+    }
+
+    .location-header h1 {
+      font-size: 3rem;
+      margin: 0.5rem 0;
+      background: linear-gradient(
+        to right,
+        var(--gradient-start, #a29bfe),
+        var(--gradient-end, #fd79a8)
+      );
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: inline-block;
+      letter-spacing: -0.5px;
+    }
+    
+    .preference-tag {
+      background: linear-gradient(
+        to right,
+        var(--gradient-start, #a29bfe),
+        var(--gradient-end, #fd79a8)
+      );
+      color: white;
+      padding: 0.3rem 1rem;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      display: inline-block;
+      text-transform: capitalize;
+      margin-top: 0.5rem;
+      box-shadow: 0 3px 10px rgba(162, 155, 254, 0.3);
+    }
+    
+    .recommendation-panel {
+      background-color: rgba(15, 15, 25, 0.7);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .recommendation-text {
+      font-size: 1.2rem;
+      text-align: center;
+      line-height: 1.6;
+      color: #e0e0e0;
+      margin-bottom: 0.8rem;
+    }
+
+    .seasonal-context {
+      text-align: center;
+      font-style: italic;
+      color: #bbb;
+      font-size: 0.95rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 0.8rem;
+      margin-top: 0.8rem;
+    }
+
+    .forecast-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .forecast-day {
+      background: linear-gradient(145deg, rgba(30, 30, 40, 0.8), rgba(20, 20, 30, 0.8));
+      border-radius: 16px;
+      padding: 1.8rem 1.2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .forecast-day:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    /* Today's Highlight Style (Enhanced from image) */
+    .forecast-day.today {
+      background: linear-gradient(145deg, #4A3C8D, #322865);
+      border: 1px solid #6A5ACD;
+      color: #fff;
+      transform: scale(1.05);
+      box-shadow: 0 10px 25px rgba(74, 60, 141, 0.6);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .forecast-day.today::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(
+        to right,
+        var(--gradient-start, #a29bfe),
+        var(--gradient-end, #fd79a8)
+      );
+    }
+
+    .forecast-day.today:hover {
+      transform: translateY(-8px) scale(1.05);
+      box-shadow: 0 15px 30px rgba(74, 60, 141, 0.7);
+    }
+
+    .forecast-day.today .day-name {
+      font-weight: bold;
+      color: #fff;
+      position: relative;
+    }
+
+    .forecast-day.today .day-name::after {
+      content: '•';
+      display: inline-block;
+      margin-left: 6px;
+      color: #fff;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    /* Day name */
+    .day-name {
+      font-weight: bold;
+      margin-bottom: 0.75rem;
+      font-size: 1.2rem;
+      color: #e0e0e0;
+    }
+
+    .weather-icon {
+      font-size: 3rem;
+      margin: 0.5rem 0 0.75rem 0;
+    }
+
+    .temp {
+      font-size: 2.5rem;
+      font-weight: bold;
+      margin: 0.25rem 0;
+      color: #fff;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .temp-range {
+      font-size: 1rem;
+      color: #ccc;
+      margin-bottom: 1rem;
+    }
+
+    /* Condition Tag Styles (Enhanced) */
+    .condition {
+      font-weight: 600;
+      padding: 0.5rem 1.2rem;
+      border-radius: 25px;
+      font-size: 0.9rem;
+      margin: 0.75rem 0;
+      color: #000;
+      background-color: #ccc;
+      border: none;
+      text-transform: capitalize;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Specific condition styles with enhanced color palette */
+    .condition.rain {
+      background-color: #5D5DFF;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(93, 93, 255, 0.4);
+    }
+    
+    .condition.clouds {
+      background-color: #9E9E9E;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(158, 158, 158, 0.4);
+    }
+    
+    .condition.snow {
+      background-color: #FF6D6D;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(255, 109, 109, 0.4);
+    }
+    
+    .condition.clear {
+      background-color: #6AFFAF;
+      color: #000;
+      box-shadow: 0 2px 8px rgba(106, 255, 175, 0.4);
+    }
+
+    .description {
+      font-size: 0.9rem;
+      color: #bbb;
+      margin: 0.5rem 0;
+      line-height: 1.4;
+    }
+
+    .precipitation {
+      font-size: 0.9rem;
+      color: #8ab4f8;
+      margin-top: 0.8rem;
+      padding: 0.3rem 0.8rem;
+      background-color: rgba(138, 180, 248, 0.1);
+      border-radius: 12px;
+      display: inline-block;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      margin-top: 2.5rem;
+      flex-wrap: wrap;
+    }
+
+    .back-button, .share-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.8rem 1.5rem;
+      border-radius: 30px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+    }
+    
+    .button-icon {
+      font-size: 1.1rem;
+    }
+
+    .back-button {
+      background: linear-gradient(to right, var(--gradient-start, #a29bfe), var(--gradient-end, #fd79a8));
+      color: white;
+      box-shadow: 0 4px 15px rgba(162, 155, 254, 0.4);
+    }
+
+    .back-button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 7px 20px rgba(162, 155, 254, 0.6);
+    }
+    
+    .share-button {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: #e0e0e0;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .share-button:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-3px);
+    }
+
+    .back-button:active, .share-button:active {
+      transform: translateY(1px);
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+    
+    @keyframes fadeInUp {
+      0% { 
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      100% { 
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideUpFade {
+      0% { 
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      100% { 
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .location-header h1 {
+        font-size: 2.2rem;
+      }
+      
+      .forecast-content {
+        padding: 1.5rem;
+      }
+      
+      .action-buttons {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: center;
+      }
+      
+      .back-button, .share-button {
+        width: 100%;
+        max-width: 250px;
+      }
+    }
+
+    /* Enhanced Rainbow Gradient Variables */
+    :root {
+      --gradient-start: #ff6b6b;
+      --gradient-middle: #4ecdc4;
+      --gradient-end: #a29bfe;
+      --gradient-full: linear-gradient(
+        135deg,
+        var(--gradient-start) 0%,
+        var(--gradient-middle) 50%,
+        var(--gradient-end) 100%
+      );
+    }
+
+    /* Rainbow Animation for Headers */
+    @keyframes rainbow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .location-header h1 {
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: rainbow 15s ease infinite;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .preference-tag {
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: rainbow 15s ease infinite;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .forecast-day.today {
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: rainbow 15s ease infinite;
+      border: none;
+      color: white;
+    }
+
+    .forecast-day.today .condition,
+    .forecast-day.today .temp,
+    .forecast-day.today .temp-range,
+    .forecast-day.today .description {
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .back-button {
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: rainbow 15s ease infinite;
+      border: none;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Enhanced Card Styles */
+    .forecast-day {
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .forecast-day:hover {
+      transform: translateY(-8px) scale(1.02);
+      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Enhanced Loading Animation */
+    .loading-spinner {
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: 
+        spin 1s linear infinite,
+        rainbow 15s ease infinite;
+    }
+  </style>
+
+  <script>
+    // Page transition effect
+    document.addEventListener('DOMContentLoaded', () => {
+      const overlay = document.getElementById('page-transition-overlay');
+      const forecastContent = document.getElementById('forecast-content');
+      const backButton = document.getElementById('back-button');
+      const backToMapButton = document.getElementById('back-to-map');
+      const shareButton = document.getElementById('share-button');
+      
+      // Handle back button click with transition
+      const handleBackNavigation = () => {
+        // Show overlay
+        if (overlay) {
+          overlay.classList.add('fade-in');
+          
+          // Wait for overlay to fade in, then navigate
+          setTimeout(() => {
+            window.location.href = '/map';
+          }, 500);
+        } else {
+          window.location.href = '/map';
+        }
+      };
+      
+      if (backButton) {
+        backButton.addEventListener('click', handleBackNavigation);
+      }
+      
+      if (backToMapButton) {
+        backToMapButton.addEventListener('click', handleBackNavigation);
+      }
+      
+      // Handle share button click
+      if (shareButton) {
+        shareButton.addEventListener('click', () => {
+          if (navigator.share) {
+            navigator.share({
+              title: 'Weather Forecast',
+              text: 'Check out this weather forecast!',
+              url: window.location.href
+            })
+            .catch(err => {
+              console.error('Share failed:', err);
+              alert('Sharing is not available on this device or browser.');
+            });
+          } else {
+            // Fallback for browsers that don't support the Web Share API
+            const dummy = document.createElement('textarea');
+            dummy.value = window.location.href;
+            document.body.appendChild(dummy);
+            dummy.select();
+            document.execCommand('copy');
+            document.body.removeChild(dummy);
+            
+            // Change button text temporarily
+            const originalText = shareButton.innerHTML;
+            shareButton.innerHTML = '<span class="button-icon">✓</span> URL Copied!';
+            setTimeout(() => {
+              shareButton.innerHTML = originalText;
+            }, 2000);
+          }
+        });
+      }
+    });
+  </script>
+</BaseLayout> 

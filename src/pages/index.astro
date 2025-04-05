@@ -1,0 +1,451 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Weather Explorer">
+	<main class="container">
+		<div id="hero-banner" class="hero">
+			<a href="#" id="start-button" class="btn">
+				<span class="btn__inner">
+					<span class="btn__label" data-label="Click Me..." data-hover="For Weather">
+						Click Me...
+						<span class="btn__label__background"></span>
+					</span>
+				</span>
+				<span class="btn__background"></span>
+			</a>
+		</div>
+
+		<div id="weather-content" class="content hidden">
+			<h2>Your Location</h2>
+			<div id="map"></div>
+			<div id="questionnaire" class="questionnaire">
+				<h3>What's your favorite weather?</h3>
+				<div class="options">
+					<button data-preference="sunny">☀️ Sunny</button>
+					<button data-preference="clear">✨ Clear</button>
+					<button data-preference="cloudy">☁️ Cloudy</button>
+					<button data-preference="rainy">🌧️ Rainy</button>
+					<button data-preference="warm">🌡️ Warm</button>
+					<button data-preference="cool">❄️ Cool</button>
+				</div>
+			</div>
+			<div id="results" class="results hidden"></div>
+		</div>
+	</main>
+
+	<script>
+		document.getElementById('start-button')?.addEventListener('click', (e) => {
+			e.preventDefault(); // Prevent default link behavior
+			const mainContainer = document.querySelector('main');
+			if (mainContainer) {
+				mainContainer.classList.add('fade-out');
+
+				// Wait for the animation to finish before navigating
+				mainContainer.addEventListener('animationend', () => {
+					window.location.href = '/map'; // Navigate to the new map page
+				}, { once: true }); // Ensure the listener is removed after firing
+			}
+		});
+	</script>
+
+	<style is:global> /* Use is:global for keyframes and body styles */
+		/* Added button styles */
+		@keyframes btn-glow {
+			0% { background-position: 0 100%; }
+			100% { background-position: 0 300%; }
+		}
+
+		.btn {
+			position: relative;
+			display: inline-block;
+			border-radius: 999em;
+			color: white;
+			font: 500 20px / 1 "Chivo Mono", monospace;
+			letter-spacing: 0.075em;
+			text-decoration: none;
+			text-transform: uppercase;
+			/* Ensure it's clickable even if partially obscured by pseudo-elements */
+			z-index: 10;
+		}
+
+		.btn__inner {
+			padding: 1px;
+			position: relative;
+			z-index: 2;
+			display: block;
+			overflow: hidden;
+			border-radius: inherit;
+		}
+
+		.btn__inner:before {
+			position: absolute;
+			inset: 4px;
+			z-index: 1;
+			display: block;
+			animation: btn-glow 5s infinite linear;
+			/* Rainbow Gradient */
+			background: linear-gradient(
+				45deg,
+				hsl(0deg 100% 50%) 0%,
+				hsl(31deg 100% 50%) 11%,
+				hsl(62deg 100% 50%) 22%,
+				hsl(93deg 100% 50%) 33%,
+				hsl(124deg 100% 50%) 44%,
+				hsl(155deg 100% 50%) 56%,
+				hsl(186deg 100% 50%) 67%,
+				hsl(217deg 100% 50%) 78%,
+				hsl(248deg 100% 50%) 89%,
+				hsl(279deg 100% 50%) 100%
+			) 0 100% / 100% 200%;
+			border-radius: inherit;
+			filter: blur(5px);
+			mix-blend-mode: overlay; /* or screen, experiment */
+			opacity: 0;
+			transition: opacity 0.2s linear 0.1s;
+			content: "";
+		}
+
+		.btn__label {
+			position: relative;
+			display: block;
+			overflow: hidden;
+			padding: 0.95em 2em 0.9em;
+			border-radius: inherit;
+			color: transparent; /* Hide original text, rely on ::before/::after */
+			white-space: nowrap;
+		}
+
+		.btn__label:before,
+		.btn__label:after {
+			position: absolute;
+			top: 0;
+			left: 0;
+			z-index: 2;
+			display: block;
+			/* Use padding of parent for alignment */
+			padding: 0.95em 2em 0.9em;
+			width: 100%;
+			height: 100%;
+			color: white;
+			white-space: nowrap;
+			transition: transform 0.3s cubic-bezier(1, 0, 0, 1) 0s;
+			text-align: center; /* Center text within label */
+		}
+
+		.btn__label:before {
+			transform: translate3d(0, 0, 0);
+			content: attr(data-label); /* Initial text */
+		}
+
+		.btn__label:after {
+			transform: translate3d(0, -100%, 0); /* Hover text initially hidden above */
+			content: attr(data-hover); /* Hover text */
+		}
+
+		.btn__label__background {
+			position: absolute;
+			inset: -100px; /* Extend beyond bounds */
+			z-index: -1; /* Behind text */
+			display: block;
+			/* Use a dark color compatible with the body */
+			background-color: var(--color-bg, #0a0a0a);
+			/* Optional: Add subtle noise if desired */
+			/* background: #093740 url("https://assets.codepen.io/5817405/noise_2.png") repeat;
+			background-blend-mode: overlay;
+			animation: noise-background 0.5s steps(1) infinite; */
+		}
+
+		.btn__background {
+			position: absolute;
+			top: 0;
+			left: 0;
+			z-index: 1; /* Below inner/label but above hero */
+			display: block;
+			width: 100%;
+			height: 100%;
+			border-radius: inherit;
+		}
+
+		.btn__background:before,
+		.btn__background:after {
+			position: absolute;
+			inset: 0;
+			display: block;
+			border-radius: inherit;
+			content: "";
+		}
+
+		.btn__background:before {
+			/* Slightly transparent dark background for base state */
+			background: rgba(20, 20, 20, 0.8);
+			transition: background 0.3s linear 0s;
+		}
+
+		.btn__background:after {
+			animation: btn-glow 5s infinite linear;
+			/* Another Rainbow Gradient for the background glow */
+			background: linear-gradient(
+				-45deg,
+				hsl(279deg 100% 50%) 0%,
+				hsl(248deg 100% 50%) 11%,
+				hsl(217deg 100% 50%) 22%,
+				hsl(186deg 100% 50%) 33%,
+				hsl(155deg 100% 50%) 44%,
+				hsl(124deg 100% 50%) 56%,
+				hsl(93deg 100% 50%) 67%,
+				hsl(62deg 100% 50%) 78%,
+				hsl(31deg 100% 50%) 89%,
+				hsl(0deg 100% 50%) 100%
+			) 0 100% / 100% 200%;
+			filter: blur(8px); /* Slightly larger blur for background */
+			opacity: 0;
+			transition: opacity 0s linear 0s;
+		}
+
+		.btn:hover .btn__background:before {
+			/* Brighter background on hover */
+			background: rgba(40, 40, 40, 0.9);
+			transition: background 0.07s linear;
+		}
+
+		.btn:hover .btn__background:after {
+			opacity: 0.8; /* Make background glow visible */
+			transition: opacity 0.4s cubic-bezier(0.55, 0.085, 0.68, 0.53) 0s;
+		}
+
+		.btn:hover .btn__inner:before {
+			opacity: 0.7; /* Make inner glow visible */
+			transition-delay: 0s; /* Show immediately on hover */
+		}
+
+		.btn:hover .btn__label:before,
+		.btn:hover .btn__label:after {
+			transition-duration: 0.6s;
+			/* Adjusted curve for smoother text transition */
+			transition-timing-function: cubic-bezier(0.2, 1, 0.3, 1);
+		}
+
+		.btn:hover .btn__label:before {
+			transform: translate3d(0, 100%, 0); /* Move initial text down */
+		}
+
+		.btn:hover .btn__label:after {
+			transform: translate3d(0, 0, 0); /* Move hover text into view */
+		}
+
+		/* --- Noise Keyframes (Optional) --- */
+		@keyframes noise-background {
+			0% { transform: translate3d(0, 0, 0); }
+			20% { transform: translate3d(50px, 30px, 0); }
+			40% { transform: translate3d(10px, 50px, 0); }
+			60% { transform: translate3d(30px, 20px, 0); }
+			80% { transform: translate3d(50px, 0, 0); }
+			100% { transform: translate3d(100px, 0, 0); }
+		}
+		/* Apply noise to body if desired */
+		/* body::before {
+			position: absolute;
+			inset: -100px;
+			z-index: -1;
+			display: block;
+			background: var(--color-bg, #0a0a0a) url("https://assets.codepen.io/5817405/noise_2.png") repeat;
+			background-blend-mode: overlay;
+			animation: noise-background 0.5s steps(1) infinite;
+			content: '';
+			opacity: 0.5;
+		} */
+
+		/* --- Existing Styles --- */
+		/* Removed .glow-button and @keyframes pulse */
+
+		.container {
+			text-align: center;
+			width: 100%;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 1rem;
+		}
+
+		.hero {
+			min-height: 50vh; /* Give it some space */
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			/* Ensure button is clickable */
+			position: relative;
+			z-index: 5;
+		}
+
+		.content {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			width: 100%;
+		}
+
+		.hidden {
+			display: none;
+			opacity: 0;
+		}
+
+		.questionnaire {
+			margin-top: 2rem;
+			background-color: rgba(255, 255, 255, 0.05);
+			padding: 1.5rem;
+			border-radius: 8px;
+			width: 80%;
+			max-width: 600px;
+		}
+
+		.questionnaire h3 {
+			margin-top: 0;
+			margin-bottom: 1rem;
+			color: var(--gradient-start);
+		}
+
+		.options {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.8rem;
+			justify-content: center;
+		}
+
+		.options button {
+			background-color: rgba(255, 255, 255, 0.1);
+			color: var(--color-text);
+			border: 1px solid rgba(255, 255, 255, 0.2);
+			/* Add other button styles from global.css if needed */
+			font-family: inherit;
+			font-size: 1rem;
+			padding: 0.8em 1.5em;
+			border-radius: 8px;
+			cursor: pointer;
+			transition: background-color 0.2s ease, border-color 0.2s ease;
+		}
+
+		.options button:hover {
+			background-color: rgba(255, 255, 255, 0.2);
+			border-color: var(--gradient-start);
+		}
+
+		.options button:disabled {
+			cursor: not-allowed;
+			opacity: 0.6;
+			background-color: rgba(128, 128, 128, 0.1);
+			border-color: rgba(128, 128, 128, 0.2);
+		}
+
+		.results {
+			margin-top: 2rem;
+			background-color: rgba(0, 0, 0, 0.3);
+			padding: 1.5rem;
+			border-radius: 8px;
+			border: 1px solid rgba(255, 255, 255, 0.1);
+			width: 80%;
+			max-width: 600px;
+			min-height: 50px; /* Ensure space while loading */
+			line-height: 1.5;
+			font-size: 1.1rem;
+			/* Ensure results text is readable */
+			color: var(--color-text);
+			text-align: center;
+		}
+
+		/* Make sure Leaflet popups fit the theme */
+		.leaflet-popup-content-wrapper {
+			background: var(--color-bg);
+			color: var(--color-text);
+			border-radius: 8px;
+			box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+		}
+		.leaflet-popup-content {
+			margin: 13px 19px;
+			line-height: 1.4;
+		}
+		.leaflet-popup-tip-container {
+			/* Hide default tip if it looks out of place */
+			/* display: none; */
+		}
+		.leaflet-popup-tip {
+			background: var(--color-bg);
+			box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+		}
+		.leaflet-container a.leaflet-popup-close-button {
+			color: var(--color-text);
+		}
+		.leaflet-container a.leaflet-popup-close-button:hover {
+			color: var(--gradient-start);
+		}
+
+		/* --- New Styles for Detailed Forecast --- */
+		#detailed-forecast {
+			margin-top: 1.5rem;
+			width: 100%; /* Take full width of results container */
+			opacity: 0; /* Start hidden for fade-in */
+			display: none; /* Start hidden */
+		}
+
+		.forecast-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* Responsive grid */
+			gap: 1rem;
+			width: 100%;
+			padding-top: 1rem;
+			border-top: 1px solid rgba(255, 255, 255, 0.2); /* Separator */
+		}
+
+		.forecast-day {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			background-color: rgba(255, 255, 255, 0.05);
+			padding: 1rem 0.5rem;
+			border-radius: 6px;
+			text-align: center;
+		}
+
+		.forecast-day .day-name {
+			font-weight: 500;
+			margin-bottom: 0.5rem;
+			font-size: 0.9em;
+		}
+
+		.forecast-day .weather-icon {
+			width: 50px;
+			height: 50px;
+			margin-bottom: 0.25rem;
+		}
+
+		.forecast-day .temp {
+			font-size: 1.2em;
+			font-weight: bold;
+			margin-bottom: 0.25rem;
+		}
+
+		.forecast-day .condition {
+			font-size: 0.8em;
+			color: var(--color-text-secondary, #bbb);
+			text-transform: capitalize;
+		}
+
+		.btn-secondary { /* Style for the Show More button */
+			background-color: rgba(255, 255, 255, 0.1);
+			color: var(--color-text);
+			border: 1px solid rgba(255, 255, 255, 0.2);
+			font-family: inherit;
+			font-size: 0.9rem;
+			padding: 0.6em 1.2em;
+			border-radius: 6px;
+			cursor: pointer;
+			transition: background-color 0.2s ease, border-color 0.2s ease;
+			margin-top: 1rem;
+		}
+		.btn-secondary:hover {
+			background-color: rgba(255, 255, 255, 0.2);
+			border-color: var(--gradient-start);
+		}
+	</style>
+	<script type="module" src="../scripts/weather.ts" defer></script>
+</BaseLayout>
