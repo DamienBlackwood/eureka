@@ -1,4 +1,30 @@
+// EARLY LOGGING - Should appear in console when page loads
+console.log("[INIT] Weather script loaded");
+
 import L from 'leaflet';
+
+// TEST_GLOBAL - we'll use this to test if global scope is available
+(window as any).debugWeatherApp = {
+	clickDay: function(date: string, dayName: string) {
+		console.log(`[MANUAL_CLICK] Clicked day ${dayName} (${date})`);
+		if (!currentForecastList) {
+			console.error("Current forecast list is not available");
+			return;
+		}
+		
+		const hourlyDataForDay = currentForecastList.filter(interval => {
+			const intervalDateStr = interval.dt_txt.split(' ')[0];
+			return intervalDateStr === date;
+		});
+		console.log(`Found ${hourlyDataForDay.length} hourly intervals for ${date}`);
+		
+		// Display hourly forecast
+		displayHourlyForecast(hourlyDataForDay, dayName || 'Selected Day');
+	}
+};
+
+// More early logging
+console.log("[INIT] Weather globals set up");
 
 const heroBanner = document.getElementById('hero-banner')!;
 const startButton = document.getElementById('start-button')!;
@@ -484,62 +510,69 @@ function findBestDay(dailySummaries: ProcessedDailySummary[], preference: string
 
 // --- Function to display detailed forecast ---
 function displayDetailedForecast(summaries: ProcessedDailySummary[] | null) {
+	console.log("[FUNC] displayDetailedForecast called");
+	
 	const detailedForecastDiv = document.getElementById('detailed-forecast');
-	if (!detailedForecastDiv || !summaries) return;
+	const hourlyForecastDiv = document.getElementById('hourly-forecast');
+	if (!detailedForecastDiv || !summaries || !hourlyForecastDiv) {
+		console.error("[ERROR] Missing elements or data:", {
+			detailedDiv: !!detailedForecastDiv,
+			summaries: !!summaries,
+			hourlyDiv: !!hourlyForecastDiv
+		});
+		return;
+	}
+
+	// Clear previous hourly forecast when displaying the 5-day view initially
+	console.log("[DEBUG] Clearing hourly forecast div");
+	hourlyForecastDiv.innerHTML = '';
+	hourlyForecastDiv.style.opacity = '0';
 
 	// Calculate overall average and show seasonal context
-	const allValidTemps = summaries.flatMap(day => day.temps).filter(temp => !isNaN(temp)); // Use original temps
-	const avgSeasonTemp = allValidTemps.length > 0 
-		? allValidTemps.reduce((sum, temp) => sum + temp, 0) / allValidTemps.length 
+	const allValidTemps = summaries.flatMap(day => day.temps).filter(temp => !isNaN(temp));
+	const avgSeasonTemp = allValidTemps.length > 0
+		? allValidTemps.reduce((sum, temp) => sum + temp, 0) / allValidTemps.length
 		: null;
-	
+
 	let seasonalContext = '';
 	if (avgSeasonTemp !== null) {
 		const season = avgSeasonTemp < 10 ? 'winter' : avgSeasonTemp > 20 ? 'summer' : 'transitional';
 		seasonalContext = `<div class="seasonal-context">Current seasonal average: ${avgSeasonTemp.toFixed(1)}°C (${season} conditions)</div>`;
 	}
-	
-	// Add location context if available
+
 	if (userLocationName) {
-		seasonalContext = `<div class="seasonal-context">
-			<div>Weather forecast for ${userLocationName}</div>
-			${avgSeasonTemp !== null ? `<div>Seasonal average: ${avgSeasonTemp.toFixed(1)}°C (${avgSeasonTemp < 10 ? 'winter' : avgSeasonTemp > 20 ? 'summer' : 'transitional'} conditions)</div>` : ''}
-		</div>`;
+		seasonalContext = `<div class="location-context">Forecast for ${userLocationName}</div>` + seasonalContext;
 	}
 
-	let forecastHTML = seasonalContext + '<div class="forecast-grid">';
-	summaries.slice(0, 5).forEach(day => { // Limit to 5 days
-		// Use the accurately calculated min/max temp
+	let forecastHTML = seasonalContext + '<h3 class="forecast-heading">5-Day Outlook (Click a day for hourly details)</h3><div class="forecast-grid">';
+	summaries.slice(0, 5).forEach(day => {
 		const minTemp = day.minTemp;
 		const maxTemp = day.maxTemp;
-		
-		// Weather condition description
 		let conditionClass = 'neutral';
 		if (['clear', 'sunny'].includes(day.dominantWeather.toLowerCase())) {
 			conditionClass = 'favorable';
 		} else if (['rain', 'snow', 'thunderstorm'].includes(day.dominantWeather.toLowerCase())) {
 			conditionClass = 'unfavorable';
 		}
-		
-		// Temperature assessment
+
 		let tempDescription = '';
-		if (day.avgTemp < 5) {
-			tempDescription = 'Very cold';
-		} else if (day.avgTemp < 12) {
-			tempDescription = 'Cold';
-		} else if (day.avgTemp < 18) {
-			tempDescription = 'Cool';
-		} else if (day.avgTemp < 25) {
-			tempDescription = 'Mild';
-		} else {
-			tempDescription = 'Warm';
-		}
-		
-		// Add today class if this is the current day
+		if (day.avgTemp < 5) tempDescription = 'Very cold';
+		else if (day.avgTemp < 12) tempDescription = 'Cold';
+		else if (day.avgTemp < 18) tempDescription = 'Cool';
+		else if (day.avgTemp < 25) tempDescription = 'Mild';
+		else tempDescription = 'Warm';
+
 		const todayClass = day.isToday ? 'today' : '';
-		
+
+		// Add onclick attribute directly in the HTML
 		forecastHTML += `
-			<div class="forecast-day ${todayClass}">
+			<div class="forecast-day ${todayClass}" 
+			     data-date="${day.date}" 
+                 data-dayname="${day.dayName}"
+                 onclick="window.debugWeatherApp.clickDay('${day.date}', '${day.dayName}')"
+                 style="cursor:pointer; position:relative;"
+            >
+                <div class="day-clickable-overlay" style="position:absolute; top:0; right:0; bottom:0; left:0; z-index:1;"></div>
 				<div class="day-name">${day.dayName}</div>
 				<img src="https://openweathermap.org/img/wn/${day.icon}@2x.png" alt="${day.dominantWeather}" class="weather-icon">
 				<div class="temp">${day.avgTemp.toFixed(0)}°C</div>
@@ -550,20 +583,169 @@ function displayDetailedForecast(summaries: ProcessedDailySummary[] | null) {
 			</div>
 		`;
 	});
-	forecastHTML += '</div>';
+	forecastHTML += '</div>'; // Close forecast-grid
 
 	detailedForecastDiv.innerHTML = forecastHTML;
+	console.log("[DEBUG] Detailed forecast HTML set");
 	fadeInElement(detailedForecastDiv);
+	console.log("[DEBUG] Detailed forecast faded in");
 
 	// Hide the "Show More Info" button after showing details
 	const showMoreButton = document.getElementById('show-more-button');
 	if (showMoreButton) {
 		showMoreButton.style.display = 'none';
+		console.log("[DEBUG] Show more button hidden");
 	}
+}
+
+// --- Function to display hourly forecast for a specific day ---
+function displayHourlyForecast(hourlyData: ForecastInterval[] | null, selectedDayName: string) {
+	console.log(`[FUNC] displayHourlyForecast called for ${selectedDayName}`);
+	const hourlyForecastDiv = document.getElementById('hourly-forecast');
+	if (!hourlyForecastDiv) {
+		console.error('[ERROR] Hourly forecast div not found!');
+		return;
+	}
+
+	if (!hourlyData) {
+		console.warn(`[ERROR] No hourly data provided for ${selectedDayName}`);
+		hourlyForecastDiv.innerHTML = `<p>No hourly data available for ${selectedDayName}.</p>`;
+		fadeInElement(hourlyForecastDiv);
+		return;
+	}
+
+	hourlyForecastDiv.innerHTML = ''; // Clear previous content
+	hourlyForecastDiv.style.opacity = '0'; // Reset for fade-in
+
+	if (hourlyData.length === 0) {
+		console.warn(`[ERROR] Hourly data array is empty for ${selectedDayName}`);
+		hourlyForecastDiv.innerHTML = `<p>Hourly details not available for ${selectedDayName}.</p>`;
+		fadeInElement(hourlyForecastDiv);
+		return;
+	}
+
+	let hourlyHTML = `<h3 class="forecast-heading">Hourly for ${selectedDayName}</h3><div class="hourly-grid">`;
+
+	hourlyData.forEach(interval => {
+		const date = new Date(interval.dt * 1000);
+		const hour = date.getHours(); // Hour (0-23)
+		const timeString = `${hour}:00`;
+
+		const temp = interval.main.temp;
+		const weather = interval.weather[0];
+		const clouds = interval.clouds.all;
+		const pop = interval.pop;
+
+		// --- Perfect Hour Check ---
+		const isPerfect = (weather.main === 'Clear' || (weather.main === 'Clouds' && clouds < 30)) &&
+		                  temp >= 15 && temp <= 25 && // Example comfortable temp range
+		                  pop < 0.3; // Low chance of rain
+		const perfectClass = isPerfect ? 'perfect-hour' : '';
+		const perfectIndicator = isPerfect ? '<span class="perfect-indicator" title="Ideal conditions!">★</span>' : '';
+
+		// --- Golden Hour Check (Approximate) ---
+		const isGoldenHour = (hour >= 6 && hour <= 7) || (hour >= 18 && hour <= 19);
+		const goldenHourClass = isGoldenHour ? 'golden-hour' : '';
+		const goldenHourIndicator = isGoldenHour ? '<span class="golden-indicator" title="Golden hour (approx)">☀️</span>' : ''; // Sun emoji
+
+		// Combine classes
+		const intervalClasses = ['hourly-interval', perfectClass, goldenHourClass].filter(Boolean).join(' ');
+
+		hourlyHTML += `
+			<div class="${intervalClasses}">
+				<div class="time">${timeString}${perfectIndicator}${goldenHourIndicator}</div>
+				<img src="https://openweathermap.org/img/wn/${weather.icon}.png" alt="${weather.description}" class="weather-icon-small">
+				<div class="temp">${temp.toFixed(0)}°C</div>
+				<div class="condition-small">${weather.main}</div>
+				${pop > 0 ? `<div class="pop-small">${(pop * 100).toFixed(0)}% rain</div>` : ''}
+			</div>
+		`;
+	});
+
+	hourlyHTML += '</div>'; // Close hourly-grid
+	hourlyForecastDiv.innerHTML = hourlyHTML;
+	fadeInElement(hourlyForecastDiv);
+	console.log(`[DEBUG] Hourly forecast displayed for ${selectedDayName}`);
+}
+
+// --- New Feature: Activity Timing Recommender ---
+
+interface TimeWindow {
+	startHour: number;
+	endHour: number; // Exclusive
+	description: string; // e.g., "Clear, 22°C"
+}
+
+function findBestActivityTimes(hourlyData: ForecastInterval[] | null, preference: string): TimeWindow[] {
+	if (!hourlyData || hourlyData.length === 0) return [];
+
+	console.log(`[Debug] Finding best times for '${preference}' from ${hourlyData.length} intervals`);
+
+	const suitableWindows: TimeWindow[] = [];
+	let currentWindow: TimeWindow | null = null;
+
+	hourlyData.forEach((interval, index) => {
+		const date = new Date(interval.dt * 1000);
+		const hour = date.getHours();
+		const temp = interval.main.temp;
+		const weatherMain = interval.weather[0].main;
+		const clouds = interval.clouds.all;
+		const pop = interval.pop;
+		let isSuitable = false;
+
+		// Define suitability criteria based on preference (similar to findBestDay, adjust as needed)
+		switch (preference) {
+			case 'sunny':
+			case 'clear':
+				isSuitable = (weatherMain === 'Clear' || (weatherMain === 'Clouds' && clouds < 30)) && pop < 0.2;
+				break;
+			case 'cloudy':
+				isSuitable = weatherMain === 'Clouds' && clouds > 50 && pop < 0.4;
+				break;
+			case 'rainy': // Maybe recommend *avoiding* rain?
+				// For now, let's find dry windows for non-rainy preferences
+				break;
+			case 'warm':
+				isSuitable = temp >= 20 && temp <= 28 && pop < 0.3 && weatherMain !== 'Rain'; // Example warm range
+				break;
+			case 'cool':
+				isSuitable = temp >= 12 && temp < 18 && pop < 0.3 && weatherMain !== 'Rain'; // Example cool range
+				break;
+		}
+
+		const description = `${weatherMain}, ${temp.toFixed(0)}°C`;
+
+		if (isSuitable) {
+			if (!currentWindow) {
+				// Start a new window
+				currentWindow = { startHour: hour, endHour: hour + 3, description: description }; // 3-hour interval
+			} else {
+				// Extend the current window
+				currentWindow.endHour = hour + 3;
+				// Update description? Maybe average conditions or just keep the start condition?
+				// currentWindow.description += ` to ${description}`; // Could get long
+			}
+		} else {
+			if (currentWindow) {
+				// End the current window if it exists
+				suitableWindows.push(currentWindow);
+				currentWindow = null;
+			}
+		}
+	});
+
+	// Add the last window if it was still open
+	if (currentWindow) {
+		suitableWindows.push(currentWindow);
+	}
+
+	console.log(`[Debug] Found windows:`, suitableWindows);
+	return suitableWindows;
 }
 
 // --- Event Listeners ---
 startButton.addEventListener('click', async (event) => {
+	console.log("[EVENT] Start button clicked");
 	event.preventDefault(); // Prevent anchor tag default navigation
 	console.log("Start button clicked");
 	fadeOutElement(heroBanner);
@@ -610,38 +792,66 @@ preferenceButtons.forEach(button => {
 
 		// Disable buttons and show loading in results area
 		preferenceButtons.forEach(btn => (btn as HTMLButtonElement).disabled = true);
-		resultsDiv.innerHTML = '<p>Analyzing the skies...</p>'; // Use innerHTML
-		resultsDiv.style.opacity = '0'; // Prepare for fade-in
-		const detailedDiv = document.getElementById('detailed-forecast'); // Clear detailed view
+		resultsDiv.innerHTML = '<p>Analyzing the skies...</p>';
+		resultsDiv.style.opacity = '0';
+		const detailedDiv = document.getElementById('detailed-forecast');
+		const hourlyDiv = document.getElementById('hourly-forecast');
 		if (detailedDiv) detailedDiv.innerHTML = '';
+		if (hourlyDiv) hourlyDiv.innerHTML = ''; // Clear hourly too
 		fadeInElement(resultsDiv);
 
-		// --- Fade out map and questionnaire ---
-		fadeOutElement(mapElement);
-		fadeOutElement(questionnaire);
-
-		console.log("Fetching weather data for analysis...");
-		// Fetch data only if we don't have it or need to refresh (optional)
-		// For now, we assume the first fetch is sufficient for the session
+		// Fetch or get cached data
 		const forecastList = currentForecastList || await fetchWeatherData(userCoords.lat, userCoords.lon);
 
 		if (forecastList && forecastList.length > 0) {
-			console.log("Processing forecast data...");
-			// Process data only if not already processed
-			const dailySummaries = currentDailySummaries || processForecastData(forecastList);
+			// Always process, maybe data changed or wasn't processed
+			const dailySummaries = processForecastData(forecastList);
 
 			if(dailySummaries && dailySummaries.length > 0){
-				console.log("Finding best day...");
-				const { bestDay, message } = findBestDay(dailySummaries, preference); // Use the already type-casted summaries
+				// Find best overall day
+				const { bestDay, message } = findBestDay(dailySummaries, preference);
+
+				// --- Find Best Activity Times for the *next 48 hours* ---
+				const next48HoursData = currentForecastList?.slice(0, 16); // Get up to 16 intervals (48 hours)
+				const bestTimes = findBestActivityTimes(next48HoursData || [], preference);
+
+				let activityTimingHTML = '';
+				if (bestTimes.length > 0) {
+					activityTimingHTML = `<div class="activity-timing">
+						<h4>Best Times for '${preference}' (Next 48h):</h4>
+						<ul>`;
+					bestTimes.forEach(window => {
+						// Determine if the window is today or tomorrow
+						const now = new Date();
+						const windowStartDate = new Date(); // We need to reconstruct the date
+						// Find the interval corresponding to the startHour to get the full date
+						const startInterval = next48HoursData?.find(interval => new Date(interval.dt*1000).getHours() === window.startHour);
+						let dayPrefix = "";
+						if (startInterval) {
+							const intervalDate = new Date(startInterval.dt * 1000);
+							if (intervalDate.getDate() === now.getDate()) {
+								dayPrefix = "Today";
+							} else {
+								dayPrefix = "Tomorrow"; // Simplification: assumes data is for today/tomorrow
+							}
+						}
+
+						activityTimingHTML += `<li>${dayPrefix} ${window.startHour}:00 - ${window.endHour}:00 (${window.description})</li>`;
+					});
+					activityTimingHTML += '</ul></div>';
+				} else {
+					activityTimingHTML = `<p>Couldn't find specific ideal time windows for '${preference}' in the next 48 hours.</p>`;
+				}
 
 				// --- Update Results Area ---
 				resultsDiv.innerHTML = `
-					<p>${message}</p>
-					<button id="show-more-button" class="btn-secondary">Show 5-Day Forecast</button>
-					<div id="detailed-forecast" class="hidden"></div>
+					<p>${message}</p> {/* Original best day message */}
+					${activityTimingHTML} {/* Add activity timing */}
+					<button id="show-more-button" class="btn-secondary">Show 5-Day / Hourly Forecast</button>
+					<div id="detailed-forecast"></div>
+					<div id="hourly-forecast"></div>
 				`;
 
-				// Add event listener to the new button
 				const showMoreButton = document.getElementById('show-more-button');
 				if (showMoreButton) {
 					showMoreButton.addEventListener('click', () => {
@@ -660,9 +870,25 @@ preferenceButtons.forEach(button => {
 			}
 		}
 
-		// Ensure results are visible and re-enable buttons
-		fadeInElement(resultsDiv); // Use fade-in again to ensure visibility
+		// Re-enable buttons and fade in results
+		fadeInElement(resultsDiv);
 		preferenceButtons.forEach(btn => (btn as HTMLButtonElement).disabled = false);
 		console.log("Analysis complete. Results displayed.");
 	});
 });
+
+// --- SELF-TEST ---
+// This should run when the script loads
+setTimeout(() => {
+	console.log("[TEST] Delayed self-test running");
+	// Check if essential elements exist
+	const elemCheck = {
+		heroBanner: !!document.getElementById('hero-banner'),
+		startButton: !!document.getElementById('start-button'),
+		weatherContent: !!document.getElementById('weather-content'),
+		mapElement: !!document.getElementById('map'),
+		questionnaire: !!document.getElementById('questionnaire'),
+		resultsDiv: !!document.getElementById('results')
+	};
+	console.log("[TEST] Element check:", elemCheck);
+}, 2000); // Wait 2 seconds for everything to load

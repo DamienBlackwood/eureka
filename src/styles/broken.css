@@ -1,0 +1,169 @@
+/* src/styles.css */
+
+/* ... existing styles ... */
+
+.forecast-heading {
+    width: 100%;
+    text-align: center;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: #333;
+    font-size: 1.3em;
+    font-weight: 600;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+  }
+  
+  .location-context {
+      width: 100%;
+      text-align: center;
+      font-size: 1.1em;
+      color: #555;
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+  }
+  
+  .seasonal-context {
+      width: 100%;
+      text-align: center;
+      font-size: 0.9em;
+      color: #777;
+      margin-bottom: 1rem;
+  }
+  
+  
+  /* Styles for the hourly forecast grid */
+  .hourly-grid {
+    display: flex;
+    overflow-x: auto; /* Allows horizontal scrolling on smaller screens */
+    padding: 1rem 0.5rem;
+    gap: 0.5rem;
+    width: 100%;
+    border-top: 1px solid #eee;
+    margin-top: 1rem;
+    /* Optional: Add subtle scrollbar styling if desired */
+    scrollbar-width: thin;
+    scrollbar-color: #ccc #f0f0f0;
+  }
+  
+  /* Style for each hourly interval block */
+  .hourly-interval {
+    flex: 0 0 auto; /* Prevent stretching, allow shrinking, basis auto */
+    min-width: 80px; /* Minimum width for each hour block */
+    padding: 0.8rem 0.5rem;
+    text-align: center;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    border: 1px solid #eee;
+  }
+  
+  .hourly-interval:hover {
+      transform: translateY(-2px);
+  }
+  
+  /* Styling for elements within the hourly block */
+  .hourly-interval .time {
+    font-weight: bold;
+    font-size: 0.9em;
+    margin-bottom: 0.3rem;
+    color: #333;
+  }
+  
+  .weather-icon-small {
+    width: 35px; /* Smaller icon size */
+    height: 35px;
+    margin: 0 auto 0.2rem; /* Center and add some bottom margin */
+    display: block;
+  }
+  
+  .hourly-interval .temp {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #444;
+    margin-bottom: 0.2rem;
+  }
+  
+  .hourly-interval .condition-small {
+      font-size: 0.8em;
+      color: #666;
+      text-transform: capitalize;
+      margin-bottom: 0.2rem;
+  }
+  
+  .hourly-interval .pop-small {
+      font-size: 0.75em;
+      color: #888;
+  }
+  
+  /* Highlight for 'perfect' hours */
+  .perfect-hour {
+    background-color: #e6f7ff; /* Light blue background */
+    border-color: #91d5ff; /* Blue border */
+  }
+  
+  .perfect-indicator {
+    color: #fadb14; /* Gold star color */
+    margin-left: 4px;
+    font-size: 1.1em;
+    cursor: default; /* Indicate it's not clickable but has info */
+  }
+  
+  /* Hide initially, rely on JS fade-in */
+  #detailed-forecast, #hourly-forecast {
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+  }
+  
+  /* Ensure fade-in works */
+  #detailed-forecast.fade-in, #hourly-forecast.fade-in {
+      opacity: 1;
+  }
+  
+  /* --- Activity Recommender Styles --- */
+  .activity-recommender {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #eef7ff; /* Light blue background */
+    border-radius: 8px;
+    border: 1px solid #bddcff;
+    font-size: 0.95em;
+  }
+  
+  .activity-recommender h4 {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    color: #0056b3;
+    font-weight: 600;
+  }
+  
+  .activity-recommender ul {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+  }
+  
+  .activity-recommender li {
+    margin-bottom: 0.5rem;
+    color: #333;
+    line-height: 1.4;
+  }
+  
+  .activity-recommender li strong {
+    color: #004085; /* Darker blue for emphasis */
+  }
+  
+  /* --- Golden Hour Styles --- */
+  .hourly-interval.golden-hour {
+    background: linear-gradient(145deg, #fff0cc, #ffdcb0); /* Subtle gold gradient */
+    border-color: #ffc168;
+  }
+  
+  /* Optional: Slightly enhance text contrast during golden hour */
+  .hourly-interval.golden-hour .time,
+  .hourly-interval.golden-hour .temp,
+  .hourly-interval.golden-hour .condition-small {
+      color: #5c3a00; /* Darker gold/brown text */
+  }
+  

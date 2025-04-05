@@ -65,7 +65,42 @@ if (lat && lon) {
       const { date, avgTemp, condition, description } = forecastData.recommendation.bestDay;
       const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'long' });
       const dateString = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      recommendationText = `${dayName}, ${dateString} looks best for '${pref}' weather. Expect ${description || condition.toLowerCase() || 'pleasant conditions'} with an average temperature around ${avgTemp?.toFixed(0)}°C.`;
+      
+      // Check the quality of the best day for the user's preference
+      const lowerCondition = (condition || '').toLowerCase();
+      const lowerDescription = (description || '').toLowerCase();
+      const isIdealWeather = 
+        (pref === 'sunny' && (lowerCondition.includes('clear') || lowerCondition.includes('sunny'))) ||
+        (pref === 'cool' && avgTemp < 20) ||
+        (pref === 'warm' && avgTemp > 20 && avgTemp < 28) ||
+        (pref === 'hiking' && !lowerCondition.includes('rain') && !lowerCondition.includes('storm')) ||
+        (pref === 'beach' && (lowerCondition.includes('clear') || lowerCondition.includes('sunny')) && avgTemp > 25);
+      
+      // Count how many good days we have in the forecast for the preference
+      const goodDaysCount = filteredForecast.filter((day: any) => {
+        const dayCondition = (day.condition || '').toLowerCase();
+        if (pref === 'sunny') return dayCondition.includes('clear') || dayCondition.includes('sunny');
+        if (pref === 'cool') return day.avgTemp < 20;
+        if (pref === 'warm') return day.avgTemp > 20 && day.avgTemp < 28;
+        if (pref === 'hiking') return !dayCondition.includes('rain') && !dayCondition.includes('storm');
+        if (pref === 'beach') return (dayCondition.includes('clear') || dayCondition.includes('sunny')) && day.avgTemp > 25;
+        return true;
+      }).length;
+      
+      // Dynamic recommendation based on conditions
+      if (goodDaysCount === 0) {
+        recommendationText = `Unfortunately, it's not your lucky week for '${pref}' weather. No ideal days found in the forecast.`;
+      } else if (goodDaysCount <= 2) {
+        if (isIdealWeather) {
+          recommendationText = `${dayName}, ${dateString} is your rare opportunity for '${pref}' weather this week. Expect ${description || condition.toLowerCase() || 'pleasant conditions'} with an average temperature around ${avgTemp?.toFixed(0)}°C.`;
+        } else {
+          recommendationText = `Not many great days for '${pref}' this week. Your best bet is ${dayName}, ${dateString} with ${description || condition.toLowerCase() || 'acceptable conditions'} and an average temperature around ${avgTemp?.toFixed(0)}°C.`;
+        }
+      } else if (goodDaysCount <= 4) {
+        recommendationText = `You have a few good days for '${pref}' this week. ${dayName}, ${dateString} looks best with ${description || condition.toLowerCase() || 'favorable conditions'} and an average temperature around ${avgTemp?.toFixed(0)}°C.`;
+      } else {
+        recommendationText = `Great week for '${pref}' enthusiasts! ${dayName}, ${dateString} stands out with ${description || condition.toLowerCase() || 'excellent conditions'} and an average temperature around ${avgTemp?.toFixed(0)}°C.`;
+      }
     } else {
       recommendationText = `Could not determine the best day for '${pref}' weather based on the forecast.`;
     }
@@ -163,8 +198,10 @@ function getConditionClass(condition: string): string {
             <div class="location-breadcrumb">
               <a href="/" class="home-link">Home</a> &gt; <a href="/map" class="map-link">Map</a> &gt; <span class="current-page">Forecast</span>
             </div>
-            <h1>{locationName}</h1>
-            <div class="preference-tag">Preference: {pref}</div>
+            <div class="location-info">
+              <h1>{locationName}</h1>
+              <div class="preference-tag">Preference: {pref}</div>
+            </div>
           </div>
           
           <div class="recommendation-panel">
@@ -210,8 +247,8 @@ function getConditionClass(condition: string): string {
                       <h3>{trail.name}</h3>
                       <p class="trail-location">{trail.location}</p>
                       <div class="trail-details">
-                        <span class="difficulty">{trail.difficulty}</span>
-                        {trail.length && <span class="length">🏃‍♂️ {trail.length.toFixed(1)} km</span>}
+                        <span class={`difficulty ${trail.difficulty?.toLowerCase()}`}>{trail.difficulty}</span>
+                        {trail.length && <span class="length"><span class="runner-icon">🏃‍♂️</span> {trail.length.toFixed(1)} km</span>}
                       </div>
                       {trail.description && <p class="trail-description">{trail.description}</p>}
                     </div>
@@ -823,97 +860,127 @@ function getConditionClass(condition: string): string {
     /* Add new styles for trails */
     .trails-section {
       margin-top: 2.5rem;
-      padding: 1.5rem;
+      padding: 2rem;
       background-color: rgba(15, 15, 25, 0.7);
-      border-radius: 12px;
+      border-radius: 16px;
       border: 1px solid rgba(255, 255, 255, 0.05);
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     }
 
     .trails-section h2 {
-      color: var(--color-text);
+      color: var(--color-text, #fff);
       margin-bottom: 1.5rem;
       text-align: center;
-      font-size: 1.8rem;
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: var(--gradient-full);
+      background-size: 200% 200%;
+      animation: rainbow 15s ease infinite;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
 
     .trails-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 1.5rem;
       padding: 0;
     }
 
+    .trail-card-link {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      border-radius: 16px;
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    
+    .trail-card-link:hover {
+      transform: translateY(-8px);
+    }
+
     .trail-card {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 1.2rem;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      transition: transform 0.2s, background-color 0.2s;
-      border: 1px solid transparent;
+      background: linear-gradient(145deg, rgba(35, 35, 50, 0.8), rgba(25, 25, 40, 0.8));
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+      transition: background-color 0.3s;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
     }
 
     .trail-card:hover {
-      transform: translateY(-4px);
-      background-color: rgba(255, 255, 255, 0.08);
-      border-color: rgba(255, 255, 255, 0.1);
+      background-color: rgba(45, 45, 65, 0.8);
+      border-color: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
     }
 
     .trail-card h3 {
-      margin: 0 0 0.25rem 0;
-      color: var(--color-text);
-      font-size: 1.1rem;
+      margin: 0 0 0.5rem 0;
+      color: #fff;
+      font-size: 1.4rem;
+      font-weight: 700;
     }
 
     .trail-location {
-      color: var(--color-text-light);
-      font-size: 0.85rem;
-      margin: 0.5rem 0;
+      color: #ccc;
+      font-size: 0.95rem;
+      margin: 0.5rem 0 1rem;
     }
 
     .trail-details {
       display: flex;
-      gap: 1rem;
-      margin: 0.8rem 0;
-      font-size: 0.85rem;
+      gap: 1.2rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      align-items: center;
     }
 
     .difficulty {
-      padding: 0.2rem 0.6rem;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.1);
-      font-weight: 500;
+      padding: 0.4rem 1rem;
+      border-radius: 50px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-align: center;
+      color: #000;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .difficulty.easy {
+      background-color: #6AFFAF;
+    }
+    
+    .difficulty.moderate {
+      background-color: #5D5DFF;
+      color: #fff;
+    }
+    
+    .difficulty.hard {
+      background-color: #FF6D6D;
+      color: #fff;
     }
     
     .length {
       display: flex;
       align-items: center;
-      gap: 0.3rem;
+      gap: 0.5rem;
+      font-weight: 500;
+      color: #e0e0e0;
+    }
+
+    .runner-icon {
+      font-size: 1.1rem;
     }
 
     .trail-description {
-      font-size: 0.9rem;
-      color: var(--color-text-light);
-      margin: 0.5rem 0 0;
-      line-height: 1.5;
-    }
-
-    /* Enhance weather details */
-    .weather-details {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 0.6rem;
-      margin-top: 0.8rem;
-      font-size: 0.85rem;
-      color: var(--color-text-light);
-      width: 100%;
-      padding: 0 0.5rem;
-    }
-
-    .weather-details > div {
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
+      font-size: 1rem;
+      color: #e0e0e0;
+      margin: 0.8rem 0 0;
+      line-height: 1.6;
+      flex-grow: 1;
     }
 
     /* Style for the AI Narrative section */
@@ -985,25 +1052,11 @@ function getConditionClass(condition: string): string {
       text-align: center;
     }
 
-    /* Trail Card Link Style */
-    .trail-card-link {
-      text-decoration: none; /* Remove underline */
-      color: inherit; /* Inherit text color */
-      display: block; /* Ensure the link fills the grid area */
-      border-radius: 12px; /* Match card radius */
-      transition: transform 0.3s ease, box-shadow 0.3s ease; /* Add smooth hover effect */
-    }
-    
-    .trail-card-link:hover,
-    .trail-card-link:focus {
-      transform: translateY(-5px); /* Lift card on hover */
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); /* Enhance shadow on hover */
-      outline: none; /* Remove focus outline if desired */
-    }
-    
-    .trail-card-link:focus-visible {
-        outline: 2px solid var(--gradient-start, #a29bfe); /* Add visible focus indicator */
-        outline-offset: 2px;
+    .location-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center; /* Center items horizontally */
+      text-align: center; /* Center text */
     }
   </style>
 
